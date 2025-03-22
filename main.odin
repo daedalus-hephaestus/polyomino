@@ -11,31 +11,52 @@ import rl "vendor:raylib"
 
 // A001168 - Number of fixed polyominoes with n cells
 
-// The polyomino, maximum size of 64
+// The polyomino - data is stored in the bin (binary) field as a dynamic array
+// of 128 bit unsigned-integers. The array can grow to the right as more bits are
+// added to the Polyomino. The bin_str is a cstring which stores the binary data
+// as a string (currently inverted)
 Polyomino :: struct {
 	bin: [dynamic]u128,
 	bin_str: cstring
 }
 
+// Stores the coordinates of a cell in a fiel
 Cell :: [2]int
 
-FieldValue :: enum {
+// The possible field states:
+// Free - an empty cell
+// Occupied - a filled cell
+// Checked - a cell that isn't occupied, but can't be filled
+// Border - Stops the polyomino from growing below the origin
+FieldState :: enum {
 	FREE,
 	OCCUPIED,
 	CHECKED,
 	BORDER
 }
-Field :: [64][128]FieldValue
 
-PolyominoIndex :: struct {
-	
-}
+// Stores the polyomino in a 128x64 grid
+// Currently only able to store every version of 62-ominoes, but I hope to
+// make it dynamically scalable eventually
+Field :: [64][128]FieldState
 
+// The tile size for the raylib window
 tile :i32 = 10
+
+// The field that stores the currently displayed polyomino
 screen := init_field() 
+// The polyomino being displayed on the screen
 screen_poly : Polyomino
+// Whether or not the currently displayed polyomino is valid
+valid : bool
+
+// The polyomino being intially loaded - will change to paste eventually
+init_bin :cstring = "10110100101001110110010110110010010010010010001101001"
+init_size : int
+cur_index := 0
 
 main :: proc() {
+	// memory leak detection
 	when ODIN_DEBUG {
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)
@@ -59,9 +80,20 @@ main :: proc() {
 	draw_window()
 }
 
+// Intializes the raylib window
 init_window :: proc () {
 	rl.InitWindow(128 * tile, 64 * tile + 100, "Polyominoes")
 	rl.SetTraceLogLevel(.ERROR)
+
+	// If there is data within the initial binary
+	if len(init_bin) > 0 {
+		// Generate the screen polyomino from the cstring
+		screen_poly = string_to_binary(init_bin)
+		// Generate the screen field from the polyomino
+		screen, valid = polyomino_to_field(screen_poly)
+
+		init_size = get_polyomino_size(screen_poly)
+	}
 }
 
 init_field :: proc() -> Field {
@@ -88,6 +120,7 @@ draw_window :: proc () {
 					rl.DrawRectangle(c.x, c.y, tile, tile, rl.GREEN)
 				case .FREE:
 				case .CHECKED:
+					rl.DrawRectangle(c.x, c.y, tile, tile, rl.BLUE)
 				case .BORDER:
 					rl.DrawRectangle(c.x, c.y, tile, tile, rl.BLACK)
 				}
@@ -99,7 +132,7 @@ draw_window :: proc () {
 		if rl.IsMouseButtonDown(.LEFT) {
 			if mouse.x > 0 && mouse.x < 127 && mouse.y >= 0 && mouse.y < 63 {
 				val := screen[mouse.y][mouse.x]
-				if val == .FREE do screen[mouse.y][mouse.x] = .OCCUPIED
+				if val == .FREE || val == .CHECKED do screen[mouse.y][mouse.x] = .OCCUPIED
 			}
 		} else if rl.IsMouseButtonDown(.RIGHT) {
 			if mouse.x > 0 && mouse.y < 127 && mouse.y >= 0 && mouse.y < 63 {
@@ -121,10 +154,21 @@ draw_window :: proc () {
 			}
 		}
 		rl.DrawText(screen_poly.bin_str, 4, 64 * tile, 10, rl.WHITE)
-			
+
+
+		for !dec_polyomino(&screen_poly) {
+			is_valid := valid_polyomino(screen_poly, init_size) 
+			if is_valid {
+				screen, _ = polyomino_to_field(screen_poly)
+				cur_index += 1
+				fmt.printfln("%v-omino: %v - %b", init_size, cur_index, screen_poly.bin)
+				//break
+			}
+		}
+
 		rl.EndDrawing()
 	}
-	
+
 	defer delete(screen_poly.bin)
 	defer delete(screen_poly.bin_str)
 	rl.CloseWindow()
@@ -267,6 +311,58 @@ field_to_polyomino :: proc(field: Field) -> Polyomino {
 	return res
 }
 
+polyomino_to_field :: proc(poly: Polyomino) -> (Field, bool) {
+	carry := 0
+
+	res := init_field()
+	free : [dynamic]Cell
+	defer delete(free)
+
+	bounds := [4]int{ 64, 0, 66, 1 }
+
+	last := poly.bin[len(poly.bin) - 1]
+	last_len := 128 - bits.count_leading_zeros(last)
+
+	calc_free(&free, bounds, &res)
+
+	skip := 0
+	for seg, i in poly.bin {
+		is_last := i == len(poly.bin) - 1
+		cur_len := 128 - bits.count_leading_zeros(last)
+
+		for j :uint = 0; j < 128; j += 1 {
+			if i == 0 && j == 0 do continue
+			if is_last && j == uint(last_len) do break
+			if last == 0 && j == uint(cur_len) && i + 2 == len(poly.bin) do break
+
+			if bit_at(j, seg) == 1 {
+				if skip > len(free) - 1 {
+					return res, false
+				}
+				
+				cell := free[skip]
+				res[cell.y][cell.x] = .OCCUPIED
+				if cell.y >= bounds[3] do bounds[3] = cell.y + 1
+				if cell.x <= bounds[0] do bounds[0] = cell.x - 1
+				if cell.x >= bounds[2] do bounds[2] = cell.x + 1
+
+				skip = 0
+				calc_free(&free, bounds, &res)
+			} else if bit_at(j, seg) == 0 {
+				if skip > len(free) - 1 {
+					return res, false
+				}
+				
+				cell := free[skip]
+				res[cell.y][cell.x] = .CHECKED
+				skip += 1 
+			}
+		}
+	}
+
+	return res, true
+}
+
 binary_to_string :: proc(poly: Polyomino) -> cstring {
 	build := str.builder_make()
 	last := poly.bin[len(poly.bin) - 1]
@@ -288,7 +384,65 @@ binary_to_string :: proc(poly: Polyomino) -> cstring {
 	return out_str 
 }
 
+string_to_binary :: proc(str: cstring) -> Polyomino {
+	res : Polyomino
+	reg_str := string(str)
+
+	append(&res.bin, 0)
+
+	carry := 0
+	cur_len :uint = 0
+
+	for char in reg_str {
+		add_val := (char == '1' ? u128(0b1) : u128(0b0)) << cur_len
+		res.bin[carry] |= add_val
+		cur_len += 1
+		if cur_len == 128 {
+			cur_len = 0
+			carry += 1
+			append(&res.bin, 0)
+		}
+	}
+
+	fmt.printfln("%b", res.bin)
+
+	return res	
+}
+
 bit_at :: proc(i: uint, b: u128) -> int {
 	shift := (b >> i) & 0b1
 	return shift == 1 ? 1 : 0
+}
+
+dec_polyomino :: proc(poly: ^Polyomino) -> bool {
+	i := 0
+	for {
+		new_val := poly^.bin[i] - 1
+		if new_val > poly.bin[i] {
+			if len(poly.bin) - 1 == i {
+				return true
+			} else {
+				poly.bin[i] = new_val
+				i += 1
+			}
+		} else {
+			poly.bin[i] = new_val 
+			return false
+		}
+	}
+}
+
+valid_polyomino :: proc(poly: Polyomino, size: int) -> bool {
+	cells := 0
+	for i in poly.bin do cells += int(bits.count_ones(i))
+	if cells != size do return false
+
+	_, valid := polyomino_to_field(poly)
+	return valid 
+}
+
+get_polyomino_size :: proc(poly: Polyomino) -> int {
+	cells := 0
+	for i in poly.bin do cells += int(bits.count_ones(i))
+	return cells
 }
