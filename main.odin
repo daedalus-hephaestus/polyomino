@@ -20,38 +20,19 @@ Polyomino :: struct {
 	bin_str: cstring
 }
 
-// Stores the coordinates of a cell in a fiel
-Cell :: [2]int
-
-// The possible field states:
-// Free - an empty cell
-// Occupied - a filled cell
-// Checked - a cell that isn't occupied, but can't be filled
-// Border - Stops the polyomino from growing below the origin
-FieldState :: enum {
-	FREE,
-	OCCUPIED,
-	CHECKED,
-	BORDER
-}
-
-// Stores the polyomino in a 128x64 grid
-// Currently only able to store every version of 62-ominoes, but I hope to
-// make it dynamically scalable eventually
-Field :: [64][128]FieldState
-
 // The tile size for the raylib window
 tile :i32 = 10
+origin := [2]i32{ tile * 64, tile * 64 }
 
 // The field that stores the currently displayed polyomino
-screen := init_field() 
+screen_field := make_field() 
 // The polyomino being displayed on the screen
-screen_poly : Polyomino
+screen_poly := newfield_to_polyomino(screen_field) 
 // Whether or not the currently displayed polyomino is valid
 valid : bool
 
 // The polyomino being intially loaded - will change to paste eventually
-init_bin :cstring = "10110100101001110110010110110010010010010010001101001"
+init_bin :cstring = ""
 init_size : int
 cur_index := 0
 
@@ -76,6 +57,9 @@ main :: proc() {
 			mem.tracking_allocator_destroy(&track)
 		}
 	}
+
+	defer destroy_field(screen_field)
+	defer destroy_polyomino(&screen_poly)
 	init_window()
 	draw_window()
 }
@@ -84,23 +68,6 @@ main :: proc() {
 init_window :: proc () {
 	rl.InitWindow(128 * tile, 64 * tile + 100, "Polyominoes")
 	rl.SetTraceLogLevel(.ERROR)
-
-	// If there is data within the initial binary
-	if len(init_bin) > 0 {
-		// Generate the screen polyomino from the cstring
-		screen_poly = string_to_binary(init_bin)
-		// Generate the screen field from the polyomino
-		screen, valid = polyomino_to_field(screen_poly)
-
-		init_size = get_polyomino_size(screen_poly)
-	}
-}
-
-init_field :: proc() -> Field {
-	field : Field
-	field[0][65] = .OCCUPIED
-	for i := 0; i < 65; i += 1 do field[0][i] = .BORDER
-	return field
 }
 
 draw_window :: proc () {
@@ -109,68 +76,48 @@ draw_window :: proc () {
 		rl.ClearBackground(rl.WHITE)
 		rl.SetTargetFPS(60)
 
-		rl.DrawRectangle(0, 64 * tile, 128 * tile, 100, rl.BLACK)
-
-		for y := len(screen) - 1; y >= 0; y -= 1 {
-			for x := 0; x < len(screen[0]); x += 1 {
-				c := [2]i32{ i32(x) * tile, 64 * tile - i32(y + 1) * tile }
-				
-				switch screen[y][x] {
-				case .OCCUPIED:
-					rl.DrawRectangle(c.x, c.y, tile, tile, rl.GREEN)
+		origin := get_origin(screen_field)
+		offset := [2]i32{
+			64 - i32(origin.x),
+			64
+		}
+		for y := len(screen_field) - 1; y >= 0; y -= 1 {
+			row := screen_field[y]
+			for cell, x in row {
+				switch cell {
 				case .FREE:
-				case .CHECKED:
-					rl.DrawRectangle(c.x, c.y, tile, tile, rl.BLUE)
-				case .BORDER:
-					rl.DrawRectangle(c.x, c.y, tile, tile, rl.BLACK)
+					// rl.DrawRectangle((i32(x) + offset.x) * tile, (-i32(y) + offset.y) * tile, tile, tile, rl.PINK)
+				case. BORDER:
+					rl.DrawRectangle((i32(x) + offset.x) * tile, (-i32(y) + offset.y) * tile, tile, tile, rl.BLACK)
+				case. OCCUPIED:
+					rl.DrawRectangle((i32(x) + offset.x) * tile, (-i32(y) + offset.y) * tile, tile, tile, rl.GREEN)
+				case. CHECKED:
 				}
 			}
 		}
 
-		mouse := [2]i32{ rl.GetMouseX() / tile, (64 * tile - rl.GetMouseY()) / tile }
+		mouse := Cell{
+			int(rl.GetMouseX() / tile - offset.x),
+			-int(rl.GetMouseY() / tile - offset.y)
+		}
 
-		if rl.IsMouseButtonDown(.LEFT) {
-			if mouse.x > 0 && mouse.x < 127 && mouse.y >= 0 && mouse.y < 63 {
-				val := screen[mouse.y][mouse.x]
-				if val == .FREE || val == .CHECKED do screen[mouse.y][mouse.x] = .OCCUPIED
-			}
-		} else if rl.IsMouseButtonDown(.RIGHT) {
-			if mouse.x > 0 && mouse.y < 127 && mouse.y >= 0 && mouse.y < 63 {
-				val := screen[mouse.y][mouse.x]
-				if val == .OCCUPIED do screen[mouse.y][mouse.x] = .FREE
-			}
+		if rl.IsMouseButtonDown(.LEFT) && mouse.y >= 0 {
+			draw_cell(&screen_field, mouse, .OCCUPIED)
+		} else if rl.IsMouseButtonDown(.RIGHT) && mouse.y >= 0 {
+			draw_cell(&screen_field, mouse, .FREE)
 		}
 
 		if rl.IsMouseButtonReleased(.LEFT) || rl.IsMouseButtonReleased(.RIGHT) {
-			delete(screen_poly.bin)
-			delete(screen_poly.bin_str)
-			screen_poly = field_to_polyomino(screen)
+			destroy_polyomino(&screen_poly)
+			print_field(screen_field)
+			screen_poly = newfield_to_polyomino(screen_field)	
+			fmt.printfln("%b", screen_poly.bin)
 		}
 
-		if rl.IsMouseButtonPressed(.LEFT) {
-			mouse := [2]i32{ rl.GetMouseX(), rl.GetMouseY() }
-			if mouse.x > 4 && mouse.x < 128 * tile - 4 && mouse.y > 64 * tile && mouse.y < 64 * tile + 10 {
-				rl.SetClipboardText(screen_poly.bin_str)
-			}
-		}
-		rl.DrawText(screen_poly.bin_str, 4, 64 * tile, 10, rl.WHITE)
-
-
-		for !dec_polyomino(&screen_poly) {
-			is_valid := valid_polyomino(screen_poly, init_size) 
-			if is_valid {
-				screen, _ = polyomino_to_field(screen_poly)
-				cur_index += 1
-				fmt.printfln("%v-omino: %v - %b", init_size, cur_index, screen_poly.bin)
-				//break
-			}
-		}
 
 		rl.EndDrawing()
 	}
 
-	defer delete(screen_poly.bin)
-	defer delete(screen_poly.bin_str)
 	rl.CloseWindow()
 }
 
@@ -219,7 +166,6 @@ generate_random :: proc (size: int) -> Polyomino {
 		length += 1
 	}
 
-	draw_field(field)
 	return result
 }
 
@@ -251,23 +197,6 @@ calc_free :: proc(free: ^[dynamic]Cell, bounds: [4]int, field: ^Field) {
 	}
 }
 
-draw_field :: proc(field: Field) {
-	for y := len(field) - 1; y >= 0; y -= 1 {
-		for x := 0; x < len(field[0]); x += 1 {
-			switch field[y][x] {
-			case .OCCUPIED:
-				fmt.print("#")
-			case .FREE:
-				fmt.print(" ")
-			case .CHECKED:
-				fmt.print(".")
-			case .BORDER:
-				fmt.print("_")
-			}
-		}
-		fmt.println("")
-	}
-}
 
 field_to_polyomino :: proc(field: Field) -> Polyomino {
 	res : Polyomino
@@ -309,58 +238,6 @@ field_to_polyomino :: proc(field: Field) -> Polyomino {
 
 	res.bin_str = binary_to_string(res)
 	return res
-}
-
-polyomino_to_field :: proc(poly: Polyomino) -> (Field, bool) {
-	carry := 0
-
-	res := init_field()
-	free : [dynamic]Cell
-	defer delete(free)
-
-	bounds := [4]int{ 64, 0, 66, 1 }
-
-	last := poly.bin[len(poly.bin) - 1]
-	last_len := 128 - bits.count_leading_zeros(last)
-
-	calc_free(&free, bounds, &res)
-
-	skip := 0
-	for seg, i in poly.bin {
-		is_last := i == len(poly.bin) - 1
-		cur_len := 128 - bits.count_leading_zeros(last)
-
-		for j :uint = 0; j < 128; j += 1 {
-			if i == 0 && j == 0 do continue
-			if is_last && j == uint(last_len) do break
-			if last == 0 && j == uint(cur_len) && i + 2 == len(poly.bin) do break
-
-			if bit_at(j, seg) == 1 {
-				if skip > len(free) - 1 {
-					return res, false
-				}
-				
-				cell := free[skip]
-				res[cell.y][cell.x] = .OCCUPIED
-				if cell.y >= bounds[3] do bounds[3] = cell.y + 1
-				if cell.x <= bounds[0] do bounds[0] = cell.x - 1
-				if cell.x >= bounds[2] do bounds[2] = cell.x + 1
-
-				skip = 0
-				calc_free(&free, bounds, &res)
-			} else if bit_at(j, seg) == 0 {
-				if skip > len(free) - 1 {
-					return res, false
-				}
-				
-				cell := free[skip]
-				res[cell.y][cell.x] = .CHECKED
-				skip += 1 
-			}
-		}
-	}
-
-	return res, true
 }
 
 binary_to_string :: proc(poly: Polyomino) -> cstring {
