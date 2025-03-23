@@ -32,15 +32,11 @@ FieldError :: enum {
 	NOT_FREE
 }
 
-// Stores the polyomino in a 128x64 grid
-// Currently only able to store every version of 62-ominoes, but I hope to
-// make it dynamically scalable eventually
-Field :: [64][128]FieldState
+Field :: [dynamic][dynamic]FieldState
+FilteredField :: Field
 
-NewField :: [dynamic][dynamic]FieldState
-
-make_field :: proc(origin: Cell = {1, 0}, size: [2]int = {3, 2}) -> NewField {
-	res : NewField
+make_field :: proc(origin: Cell = {1, 0}, size: [2]int = {3, 2}) -> Field {
+	res : Field
 
 	for i in 0..< size.y {
 		row := make([dynamic]FieldState, size.x)
@@ -55,12 +51,12 @@ make_field :: proc(origin: Cell = {1, 0}, size: [2]int = {3, 2}) -> NewField {
 	return res
 }
 
-destroy_field :: proc(field: NewField) {
+destroy_field :: proc(field: Field) {
 	for row in field do delete(row) 
 	delete(field)
 }
 
-grow_field :: proc(field: ^NewField, dir: Direction) {
+grow_field :: proc(field: ^Field, dir: Direction) {
 	switch dir {
 	case .UP:
 		append(field, make([dynamic]FieldState, len(field^[0])))
@@ -77,7 +73,7 @@ grow_field :: proc(field: ^NewField, dir: Direction) {
 	}
 }
 
-get_free :: proc(field: ^NewField, free: ^[dynamic]Cell) {
+get_free :: proc(field: ^Field, free: ^[dynamic]Cell) {
 	clear(free)		
 
 	for row, y in field {
@@ -100,22 +96,20 @@ get_free :: proc(field: ^NewField, free: ^[dynamic]Cell) {
 	}	
 }
 
-add_cell_from_free :: proc(field: ^NewField, free: []Cell, index: int) -> FieldError {
+add_cell_from_free :: proc(field: ^Field, free: []Cell, index: int) -> FieldError {
 	if index >= len(free) do return .OUT_OF_RANGE_FREE 
 
 	for cell in free[:index] {
 		if field[cell.y][cell.x] != .FREE {
-			fmt.println(cell)
 			return .NOT_FREE
 		}
 		field[cell.y][cell.x] = .CHECKED
 	}
-
 	err := add_cell(field, free[index])
 	return err 
 }
 
-add_cell :: proc(field: ^NewField, cell: Cell) -> FieldError {
+add_cell :: proc(field: ^Field, cell: Cell) -> FieldError {
 	size := [2]int{ len(field[0]), len(field) }
 	if cell.y >= size.y || cell.y < 0 do return .OUT_OF_RANGE_Y 
 	if cell.x >= size.x || cell.x < 0 do return .OUT_OF_RANGE_X
@@ -130,9 +124,12 @@ add_cell :: proc(field: ^NewField, cell: Cell) -> FieldError {
 	return .NONE
 }
 
-draw_cell :: proc(field: ^NewField, cell: Cell, value: FieldState) {
+draw_cell :: proc(field: ^Field, cell: Cell, value: FieldState) {
 	cur_coords := cell
 	size := [2]int{ len(field[0]), len(field) }
+
+	origin := get_origin(field^)
+	if origin == cur_coords do return
 
 	for cur_coords.y + 1 >= size.y {
 		grow_field(field, .UP)
@@ -147,13 +144,12 @@ draw_cell :: proc(field: ^NewField, cell: Cell, value: FieldState) {
 		grow_field(field, .RIGHT)
 		size.x = len(field[0])
 	}
-
 	if field[cur_coords.y][cur_coords.x] != .BORDER {
 		field[cur_coords.y][cur_coords.x] = value
 	}
 }
 
-print_field :: proc(field: NewField) {
+print_field :: proc(field: Field) {
 	for y := len(field) - 1; y >= 0; y -= 1 {
 		for cell, x in field[y] {
 			switch cell {
@@ -171,7 +167,7 @@ print_field :: proc(field: NewField) {
 	}
 }
 
-newfield_to_polyomino :: proc(field: NewField) -> NewPolyomino {
+field_to_polyomino :: proc(field: Field) -> Polyomino {
 	res := make_polyomino()
 	carry := 0
 	cur_index := 1
@@ -182,11 +178,7 @@ newfield_to_polyomino :: proc(field: NewField) -> NewPolyomino {
 
 	outer: for {
 		get_free(&dum, &free)
-		if len(free) == 0 {
-			fmt.println("no spaces")
-			break outer
-		}
-
+		if len(free) == 0 do break outer
 		for cell, i in free {
 			cur_index += 1
 
@@ -195,15 +187,11 @@ newfield_to_polyomino :: proc(field: NewField) -> NewPolyomino {
 				cur_index = 1
 				carry += 1
 			}
-
-			fmt.println(field[cell.y][cell.x])
 			if field[cell.y][cell.x] == .OCCUPIED {
 				err := add_cell_from_free(&dum, free[:], i)
 				res.bin[carry] |= u128(1) << uint(cur_index - 1)
 				break
 			} else if i == len(free) - 1 {
-				fmt.println(free)
-				fmt.println("reached end of free")
 				break outer
 			}
 		}
@@ -211,72 +199,41 @@ newfield_to_polyomino :: proc(field: NewField) -> NewPolyomino {
 	return res
 }
 
-get_origin :: proc(field: NewField) -> Cell {
+get_origin :: proc(field: Field) -> Cell {
 	for cell, i in field[0] {
 		if cell == .OCCUPIED do return { i, 0 }
 	}
 	return { -1, -1 }
 }
 
+filter_field :: proc(field: Field) -> FilteredField {
+	empty_field : FilteredField
 
+	keep_col := make(map[int]bool)
+	keep_row := make(map[int]bool)
+	defer delete(keep_col)
+	defer delete(keep_row)
 
+	offset := [2]int{ -1, -1 }
 
-init_field :: proc() -> Field {
-	field : Field
-	field[0][65] = .OCCUPIED
-	for i := 0; i < 65; i += 1 do field[0][i] = .BORDER
-	return field
-}
-
-
-polyomino_to_field :: proc(poly: Polyomino) -> (Field, bool) {
-	carry := 0
-
-	res := init_field()
-	free : [dynamic]Cell
-	defer delete(free)
-
-	bounds := [4]int{ 64, 0, 66, 1 }
-
-	last := poly.bin[len(poly.bin) - 1]
-	last_len := 128 - bits.count_leading_zeros(last)
-
-	calc_free(&free, bounds, &res)
-
-	skip := 0
-	for seg, i in poly.bin {
-		is_last := i == len(poly.bin) - 1
-		cur_len := 128 - bits.count_leading_zeros(last)
-
-		for j :uint = 0; j < 128; j += 1 {
-			if i == 0 && j == 0 do continue
-			if is_last && j == uint(last_len) do break
-			if last == 0 && j == uint(cur_len) && i + 2 == len(poly.bin) do break
-
-			if bit_at(j, seg) == 1 {
-				if skip > len(free) - 1 {
-					return res, false
-				}
-				
-				cell := free[skip]
-				res[cell.y][cell.x] = .OCCUPIED
-				if cell.y >= bounds[3] do bounds[3] = cell.y + 1
-				if cell.x <= bounds[0] do bounds[0] = cell.x - 1
-				if cell.x >= bounds[2] do bounds[2] = cell.x + 1
-
-				skip = 0
-				calc_free(&free, bounds, &res)
-			} else if bit_at(j, seg) == 0 {
-				if skip > len(free) - 1 {
-					return res, false
-				}
-				
-				cell := free[skip]
-				res[cell.y][cell.x] = .CHECKED
-				skip += 1 
-			}
+	for row, y in field {
+		for val, x in row {
+			if val == .OCCUPIED {
+				keep_col[x] = true
+				keep_row[y] = true
+				if offset.x == -1 || x < offset.x do offset.x = x
+				if offset.y == -1 || y < offset.y do offset.y = y
+			}			
 		}
 	}
+	size := [2]int{ len(keep_col), len(keep_row) }
+	for i in 0..<size.y do append(&empty_field, make([dynamic]FieldState, size.x))
 
-	return res, true
+	for y := offset.y; y - offset.y < size.y; y += 1 {
+		for x := offset.x; x - offset.x < size.x; x += 1 {
+			if field[y][x] == .OCCUPIED do empty_field[y - offset.y][x-offset.x] = .OCCUPIED 
+		}
+	}
+	return empty_field
 }
+
