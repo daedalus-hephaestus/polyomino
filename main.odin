@@ -18,7 +18,7 @@ origin := [2]i32{ tile * 64, tile * 64 }
 // The field that stores the currently displayed polyomino
 screen_field := make_field() 
 // The polyomino being displayed on the screen
-screen_poly := field_to_polyomino(screen_field) 
+screen_poly : Polyomino
 // Whether or not the currently displayed polyomino is valid
 valid : bool
 
@@ -59,6 +59,8 @@ main :: proc() {
 init_window :: proc () {
 	rl.InitWindow(128 * tile, 64 * tile + 100, "Polyominoes")
 	rl.SetTraceLogLevel(.ERROR)
+
+	screen_poly = field_to_polyomino(screen_field)
 }
 
 draw_window :: proc () {
@@ -100,11 +102,23 @@ draw_window :: proc () {
 
 		if rl.IsMouseButtonReleased(.LEFT) || rl.IsMouseButtonReleased(.RIGHT) {
 			destroy_polyomino(&screen_poly)
-			print_field(screen_field)
 			screen_poly = field_to_polyomino(screen_field)
 			filtered := filter_field(screen_field)
+
 			print_field(filtered)
+			fmt.println("")
+			rotate_field(&filtered)
+			print_field(filtered)
+
+			unfiltered := unfilter_field(filtered)
 			destroy_field(filtered)
+
+			new_poly := field_to_polyomino(unfiltered)
+			fmt.printfln("%b", new_poly.bin)
+
+			destroy_field(unfiltered)
+			destroy_polyomino(&new_poly)
+
 		}
 
 		rl.EndDrawing()

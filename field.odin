@@ -156,7 +156,7 @@ print_field :: proc(field: Field) {
 			case .OCCUPIED:
 				fmt.print("#")
 			case .FREE:
-				fmt.print(" ")
+				fmt.print(".")
 			case .CHECKED:
 				fmt.print(".")
 			case .BORDER:
@@ -237,3 +237,64 @@ filter_field :: proc(field: Field) -> FilteredField {
 	return empty_field
 }
 
+copy_field :: proc(field: Field) -> Field {
+	res : Field
+	for row, y in field {
+		append(&res, make([dynamic]FieldState))
+		for val, x in row {
+			append(&res[y], val)
+		}
+	}
+	return res
+}
+
+flip_field :: proc(field: ^Field) {
+	tmp_field := copy_field(field^)
+	defer destroy_field(tmp_field)
+
+	for row, y in tmp_field {
+		i := len(row) - 1 
+		for val, x in row {
+			field[y][i] = val
+			i -= 1
+		}
+	}
+}
+
+rotate_field :: proc(field: ^Field) {
+	tmp_field := copy_field(field^)
+	defer destroy_field(tmp_field)
+
+	for i in field do delete(i)
+	clear(field)
+
+	for _, x in tmp_field[0] {
+		append(field, make([dynamic]FieldState, len(tmp_field)))
+	}
+
+	for row, y in tmp_field {
+		i := len(row) - 1
+		for val, x in row {
+			field[i][y] = val
+			i -= 1
+		}
+	}
+	
+}
+
+unfilter_field :: proc(field: FilteredField) -> Field {
+	res := copy_field(field) 
+
+	end_border := false
+	for val, x in res[0] {
+		if !end_border && val == .FREE do res[0][x] = .BORDER	
+		if val == .OCCUPIED do end_border = true
+	}
+
+	grow_field(&res, .LEFT)
+	grow_field(&res, .RIGHT)
+	grow_field(&res, .UP)
+
+	print_field(res)
+	return res
+}
