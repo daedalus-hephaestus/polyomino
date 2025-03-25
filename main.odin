@@ -8,6 +8,8 @@ import "core:math/rand"
 import str "core:strings"
 import bits "core:math/bits"
 import rl "vendor:raylib"
+import "core:sync"
+import "core:thread"
 
 // A001168 - Number of fixed polyominoes with n cells
 
@@ -50,18 +52,26 @@ main :: proc() {
 	}
 
 
-	size := 45
-	max := 45
+	size := 20 
+	max := 10000
 
 	screen_poly = starting_polyomino(size)
-	index := 0 
+	index := 0
+	checked :u128 = 0
+	fmt.printf("\033[s")
+
 	for index < max {
+		checked += 1
+		fmt.printf("\033[u")
+		fmt.printfln("current: %v - checked: %v", index, checked)
 		if valid_free_polyomino(screen_poly, size) {
 			destroy_field(screen_field)
 			screen_field, _ = polyomino_to_field(screen_poly)
-			print_field(screen_field)
 			index += 1
+			fmt.printf("\033[0J")
+			print_field(screen_field)
 		}
+		inc_polyomino(&screen_poly)
 		inc_polyomino(&screen_poly)
 	}
 

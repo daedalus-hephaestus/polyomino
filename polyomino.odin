@@ -2,6 +2,7 @@ package polyomino
 
 import "core:math/bits"
 import "core:fmt"
+import "core:os"
 import str "core:strings"
 
 Polyomino :: struct {
