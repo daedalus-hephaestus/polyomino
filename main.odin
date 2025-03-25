@@ -49,10 +49,26 @@ main :: proc() {
 		}
 	}
 
+
+	size := 45
+	max := 45
+
+	screen_poly = starting_polyomino(size)
+	index := 0 
+	for index < max {
+		if valid_free_polyomino(screen_poly, size) {
+			destroy_field(screen_field)
+			screen_field, _ = polyomino_to_field(screen_poly)
+			print_field(screen_field)
+			index += 1
+		}
+		inc_polyomino(&screen_poly)
+	}
+
 	defer destroy_field(screen_field)
 	defer destroy_polyomino(&screen_poly)
-	init_window()
-	draw_window()
+	//init_window()
+	//draw_window()
 }
 
 // Intializes the raylib window
@@ -103,22 +119,6 @@ draw_window :: proc () {
 		if rl.IsMouseButtonReleased(.LEFT) || rl.IsMouseButtonReleased(.RIGHT) {
 			destroy_polyomino(&screen_poly)
 			screen_poly = field_to_polyomino(screen_field)
-			filtered := filter_field(screen_field)
-
-			print_field(filtered)
-			fmt.println("")
-			rotate_field(&filtered)
-			print_field(filtered)
-
-			unfiltered := unfilter_field(filtered)
-			destroy_field(filtered)
-
-			new_poly := field_to_polyomino(unfiltered)
-			fmt.printfln("%b", new_poly.bin)
-
-			destroy_field(unfiltered)
-			destroy_polyomino(&new_poly)
-
 		}
 
 		rl.EndDrawing()
@@ -126,51 +126,3 @@ draw_window :: proc () {
 
 	rl.CloseWindow()
 }
-
-//generate_random :: proc (size: int) -> Polyomino {
-//	result : Polyomino
-//
-//	append(&result.bin, 0b1)
-//	str_length := 1 
-//	carry :uint = 0 
-//
-//	length :int = 1
-//	bounds := [4]int{64, 0, 66, 1}
-//
-//	free : [dynamic]Cell
-//	defer delete(free)
-//
-//	field := init_field()
-//
-//	for length < size {
-//		calc_free(&free, bounds, &field)
-//
-//		if len(free) == 0 do break
-//		rand_index := rand.int_max(len(free))
-//
-//		for cell, i in free {
-//			str_length += 1
-//			if str_length > 128 {
-//				append(&result.bin, 0)
-//				str_length = 1
-//				carry += 1 
-//			}
-//
-//			if i == rand_index {
-//				field[cell.y][cell.x] = .OCCUPIED
-//				if cell.y >= bounds[3] do bounds[3] = cell.y + 1
-//				if cell.x <= bounds[0] do bounds[0] = cell.x - 1
-//				if cell.x >= bounds[2] do bounds[2] = cell.x + 1
-//
-//				result.bin[carry] |= u128(0b1) << uint(str_length - 1)
-//
-//				break
-//			} else {
-//				field[cell.y][cell.x] = .CHECKED
-//			}
-//		}
-//		length += 1
-//	}
-//
-//	return result
-//}

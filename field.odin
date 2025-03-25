@@ -295,6 +295,25 @@ unfilter_field :: proc(field: FilteredField) -> Field {
 	grow_field(&res, .RIGHT)
 	grow_field(&res, .UP)
 
-	print_field(res)
+	return res
+}
+
+field_variations :: proc(field: Field) -> Variations {
+	res : Variations
+	filtered := filter_field(field)
+	defer destroy_field(filtered)
+
+	res[0] = field_to_polyomino(field)
+
+	for i in 1..<8 {
+		rotate_field(&filtered)
+		if i == 4 do flip_field(&filtered)
+
+		tmp_field := unfilter_field(filtered)
+		defer destroy_field(tmp_field)
+
+		res[i] = field_to_polyomino(tmp_field)
+	}
+
 	return res
 }
