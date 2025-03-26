@@ -32,13 +32,10 @@ cur_index := 0
 
 max_threads :: 15 
 
-polyomino_size :: 20 
-polyomino_index :: 10000 
+polyomino_size :: 45 
+polyomino_index :: 45 
 
 stopwatch : time.Stopwatch
-
-
-Index :: [dynamic]u128
 
 IsValid :: enum {
 	UNCHECKED,
@@ -54,14 +51,13 @@ QueueItem :: struct {
 Queue :: struct {
 	list: [max_threads]QueueItem,
 	count: u128,
+	checked: u128,
 	wait_group: sync.Wait_Group,
-	testing_done: sync.Barrier, 
 	counting_done: sync.Barrier
 }
 
 init_queue :: proc() -> Queue {
 	res : Queue
-	sync.barrier_init(&res.testing_done, max_threads)
 	sync.barrier_init(&res.counting_done, max_threads + 1)
 	sync.wait_group_add(&res.wait_group, max_threads)
 	tmp := starting_polyomino(polyomino_size)
@@ -104,6 +100,9 @@ main :: proc() {
 		}
 	}
 
+	// saves the cursor top position, and makes it invisible
+	fmt.printf("\033[s\033[?25l")
+
 	time.stopwatch_start(&stopwatch)
 
 	threads: [max_threads]^thread.Thread
@@ -133,29 +132,7 @@ main :: proc() {
 
 	defer thread.destroy(reader)
 	for t in threads do thread.destroy(t)
-	 //print_queue(queue)
-
-
-	//
-	//fmt.printf("\033[s")
-	//
-	//for queue.index < queue.max {
-	//	queue.checked += 1
-	//	fmt.printf("\033[u")
-	//	fmt.printfln("current: %v - checked: %v", queue.index, queue.checked)
-	//	if valid_free_polyomino(queue.cur, size) {
-	//		tmp_field, _ := polyomino_to_field(queue.cur)
-	//		defer destroy_field(tmp_field)
-	//		queue.index += 1
-	//		fmt.printf("\033[0J")
-	//		print_field(tmp_field)
-	//	}
-	//	inc_polyomino(&queue.cur)
-	//	inc_polyomino(&queue.cur)
-	//}
-	//
-	//init_window()
-	//draw_window()
+	fmt.printf("\033[?25h")
 }
 
 process_poly :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
@@ -180,15 +157,22 @@ read_queue :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 	outer: for queue.count <= polyomino_index {
 		sync.wait_group_wait(&queue.wait_group)
 
-		for queue_item in queue.list do if queue_item.is_valid == .YES {
-			queue.count += 1
-			if queue.count == polyomino_index {
+		for queue_item in queue.list {
+			queue.checked += 1
+			if queue_item.is_valid == .YES {
+				queue.count += 1
 				tmp_field, _ := polyomino_to_field(queue_item.poly)
 				defer destroy_field(tmp_field)
+				fmt.printf("\033[0J")
 				print_field(tmp_field)
-				sync.barrier_wait(&queue.counting_done)
-				break outer	
+
+				if queue.count == polyomino_index {
+					fmt.printfln("\033[uchecked: %v, found: %v", queue.checked, queue.count)
+					sync.barrier_wait(&queue.counting_done)
+					break outer	
+				}
 			}
+			fmt.printfln("\033[uchecked: %v, found: %v", queue.checked, queue.count)
 		}
 		sync.wait_group_add(&queue.wait_group, max_threads)
 		sync.barrier_wait(&queue.counting_done)
