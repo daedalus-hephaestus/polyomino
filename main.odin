@@ -30,10 +30,10 @@ init_bin :cstring = ""
 init_size : int
 cur_index := 0
 
-max_threads :: 48 
+max_threads :: 100 
 
-polyomino_size :: 45 
-polyomino_index :: 8750 
+polyomino_size :: 20 
+polyomino_index :: 2870671950
 
 stopwatch : time.Stopwatch
 
