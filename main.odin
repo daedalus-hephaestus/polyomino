@@ -30,10 +30,10 @@ init_bin :cstring = ""
 init_size : int
 cur_index := 0
 
-max_threads :: 15 
+max_threads :: 48 
 
 polyomino_size :: 45 
-polyomino_index :: 45 
+polyomino_index :: 8750 
 
 stopwatch : time.Stopwatch
 
@@ -64,7 +64,6 @@ init_queue :: proc() -> Queue {
 	defer destroy_polyomino(&tmp)
 	for i in 0..<max_threads {
 		res.list[i].poly = copy_polyomino(tmp)
-		inc_polyomino(&tmp)
 		inc_polyomino(&tmp)
 	}
 	return res
@@ -99,6 +98,12 @@ main :: proc() {
 			mem.tracking_allocator_destroy(&track)
 		}
 	}
+	
+	//test : Polyomino
+	//defer destroy_polyomino(&test)
+	//append(&test.bin, max(u128))
+	//inc_polyomino(&test)
+	//inc_polyomino(&test)
 
 	// saves the cursor top position, and makes it invisible
 	fmt.printf("\033[s\033[?25l")
@@ -147,7 +152,7 @@ process_poly :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
 		sync.wait_group_done(&queue.wait_group)
 		sync.barrier_wait(&queue.counting_done)
 		if queue.count >= polyomino_index do break
-		for i in 0..<max_threads*2 {
+		for i in 0..<max_threads {
 			inc_polyomino(&queue.list[id].poly)
 		}
 	}
@@ -163,14 +168,17 @@ read_queue :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 				queue.count += 1
 				tmp_field, _ := polyomino_to_field(queue_item.poly)
 				defer destroy_field(tmp_field)
-				fmt.printf("\033[0J")
-				print_field(tmp_field)
 
 				if queue.count == polyomino_index {
 					fmt.printfln("\033[uchecked: %v, found: %v", queue.checked, queue.count)
 					sync.barrier_wait(&queue.counting_done)
+					fmt.printf("\033[0J")
+					print_field(tmp_field)
 					break outer	
 				}
+
+				fmt.printfln("\033[0J")
+				print_field(tmp_field)
 			}
 			fmt.printfln("\033[uchecked: %v, found: %v", queue.checked, queue.count)
 		}

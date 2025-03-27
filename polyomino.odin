@@ -151,19 +151,56 @@ dec_polyomino :: proc(poly: ^Polyomino) -> bool {
 }
 
 inc_polyomino :: proc(poly: ^Polyomino) {
-	i := 0
+	i := 1
+	move_ones := 1
 	for {
-		if i >= len(poly.bin) do append(&poly.bin, 0)
+		cur_carry := (i) / 128
+		next_carry := (i + 1) / 128
+		if len(poly.bin) == next_carry do append(&poly.bin, 0)
 
-		new_val := poly^.bin[i] + 1
-		if new_val < poly.bin[i] {
-			poly.bin[i] = new_val
-			i += 1
+		cur := poly.bin[cur_carry] >> uint(i - 128 * cur_carry) & 1
+		next := poly.bin[next_carry] >> uint((i - 128 * next_carry) + 1) & 1
+
+		if cur == 1 {
+			if next == 0 {
+				poly.bin[next_carry] |= u128(1) << uint((i - 128 * next_carry) + 1)
+				break
+			}
+			move_ones += 1
+		}
+
+		i += 1
+	}
+	max_index := i / 128 + 1
+	for cur in 0..<max_index {
+		if cur != max_index - 1 {
+			poly.bin[cur] = 0
 		} else {
-			poly.bin[i] = new_val
-			break
+			shift := uint(i - 128 * cur) + 1
+			poly.bin[cur] = poly.bin[cur] >> shift << shift
+		}
+
+		if move_ones >= 128 {
+			poly.bin[cur] = max(u128)
+			move_ones -= 128
+		} else {
+			poly.bin[cur] |= max(u128) >> uint(128 - move_ones)
 		}
 	}
+
+	//i := 0
+	//for {
+	//	if i >= len(poly.bin) do append(&poly.bin, 0)
+	//
+	//	new_val := poly^.bin[i] + 1
+	//	if new_val < poly.bin[i] {
+	//		poly.bin[i] = new_val
+	//		i += 1
+	//	} else {
+	//		poly.bin[i] = new_val
+	//		break
+	//	}
+	//}
 }
 
 valid_polyomino :: proc(poly: Polyomino, size: int) -> PolyominoError {
