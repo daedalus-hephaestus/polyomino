@@ -92,10 +92,8 @@ read_queue :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 
 				if queue.count == queue.index {
 					fmt.printfln("\033[uchecked: %v, found: %v", queue.checked, queue.count)
-					if queue.print > 0 {
-						fmt.printfln("\033[0JNo. %v", queue.count)
-						print_field(queue_item.field)
-					}
+					fmt.printfln("\033[0JNo. %v", queue.count)
+					print_field(queue_item.field)
 					sync.barrier_wait(&queue.counting_done)
 					break outer	
 				}
