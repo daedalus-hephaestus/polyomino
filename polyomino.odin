@@ -48,17 +48,21 @@ get_polyomino_len :: proc(poly: Polyomino) -> int {
 
 polyomino_to_field :: proc(poly: Polyomino) -> (Field, PolyominoError) {
 	res := make_field()
-	carry := 0
-	skip := 0
+	carry := 0 // the current u128 that is being read
+	skip := 0 // how many zeroes since the last one
 	free : [dynamic]Cell
 	defer delete(free)
 	get_free(&res, &free)
 
+	// gets the last u128
 	last_seg := poly.bin[len(poly.bin) - 1]
+	// the length of the last u128
 	last_len := 128 - bits.count_leading_zeros(last_seg)
 
 	for seg, i in poly.bin {
+		// if the current u128 is the last one
 		is_last := i == len(poly.bin) - 1
+		// gets the length of the current u128
 		cur_len := 128 - bits.count_leading_zeros(seg)
 
 		for j :uint = 0; j < 128; j += 1 {
@@ -71,11 +75,13 @@ polyomino_to_field :: proc(poly: Polyomino) -> (Field, PolyominoError) {
 			if last_seg == 0 && j == uint(cur_len) && i + 2  == len(poly.bin) do break
 
 			if bit_at(j, seg) == 1 {
+				// if the skip is greater than free spaces
 				if skip > len(free) - 1 do return res, .ONE_OVERFLOW
 				add_cell_from_free(&res, free[:], skip)
 				skip = 0
 				get_free(&res, &free)
 			} else if bit_at(j, seg) == 0 {
+				// if the skip is greater than free spaces
 				if skip > len(free) - 1 do return res, .ZERO_OVERFLOW
 				skip += 1
 			}
@@ -153,6 +159,8 @@ dec_polyomino :: proc(poly: ^Polyomino) -> bool {
 inc_polyomino :: proc(poly: ^Polyomino) {
 	i := 1
 	move_ones := 1
+	// Get the first 1 that is followed by a 0, and shift it to the left
+	// e.g. 101101 -> 110101 (first one is ignored)
 	for {
 		cur_carry := (i) / 128
 		next_carry := (i + 1) / 128
@@ -172,6 +180,8 @@ inc_polyomino :: proc(poly: ^Polyomino) {
 		i += 1
 	}
 	max_index := i / 128 + 1
+	// Shifts all of the ones to the right which are before the previously moved 1
+	// e.g. 110101 -> 110011
 	for cur in 0..<max_index {
 		if cur != max_index - 1 {
 			poly.bin[cur] = 0

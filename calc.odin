@@ -61,35 +61,43 @@ print_queue :: proc(queue: Queue) {
 }
 
 process_poly :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
+	// run while the current count is less than the maximum index
 	for queue.count <= queue.index {
-		// run tests here
-		cur := queue.list[id]
+		cur := queue.list[id] // the queue item this thread is allowed to work on
+	
+		// checks if the given polyomino is free, and saves the generated field to the queue
 		free : bool
+		destroy_field(queue.list[id].field)
 		queue.list[id].field, free = valid_free_polyomino(cur.poly, queue.size)
+		queue.list[id].is_valid = free ? .YES	: .NO
 
-		if free {
-			queue.list[id].is_valid = .YES	
-		} else {
-			queue.list[id].is_valid = .NO
-		}
+		// pauses until all other threads are done with their polyomino
 		sync.wait_group_done(&queue.wait_group)
+		// waits until the reader has added the valid polyominoes
 		sync.barrier_wait(&queue.counting_done)
+
+		// closes the thread when the index is reached
 		if queue.count >= queue.index do break
-		for i in 0..<queue.thread_count {
-			inc_polyomino(&queue.list[id].poly)
-		}
+
+		// increment this thread's polyomino as many times as there are threads
+		for i in 0..<queue.thread_count do inc_polyomino(&queue.list[id].poly)
 	}
 }
 
 read_queue :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 	outer: for queue.count <= queue.index {
+		// wait for all of the threads to finish their polyominoes
 		sync.wait_group_wait(&queue.wait_group)
 
+		// loops through the queue list
 		for queue_item in queue.list {
-			queue.checked += 1
+			queue.checked += 1 // increment the checked counter
+
+			// if the checked polyomino is valid
 			if queue_item.is_valid == .YES {
 				queue.count += 1
 
+				// if this is the last polyomino
 				if queue.count == queue.index {
 					fmt.printfln("\033[uchecked: %v, found: %v", queue.checked, queue.count)
 					fmt.printfln("\033[0JNo. %v", queue.count)
@@ -97,6 +105,8 @@ read_queue :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 					sync.barrier_wait(&queue.counting_done)
 					break outer	
 				}
+
+				// prints the found polyomino
 				if queue.print > 0 && queue.count % queue.print == 0 {
 					fmt.printfln("\033[0JNo. %v", queue.count)
 					print_field(queue_item.field)
@@ -104,7 +114,9 @@ read_queue :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 			}
 			fmt.printfln("\033[uchecked: %v, found: %v", queue.checked, queue.count)
 		}
+		// tell all of the threads to start calculating again
 		sync.wait_group_add(&queue.wait_group, queue.thread_count)
+		// tell all of the threads that counting is done
 		sync.barrier_wait(&queue.counting_done)
 	}
 }

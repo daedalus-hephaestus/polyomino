@@ -15,6 +15,7 @@ FieldState :: enum {
 	BORDER
 }
 
+// The possible directions a field can grow
 Direction :: enum {
 	UP,
 	LEFT,
@@ -24,6 +25,7 @@ Direction :: enum {
 // Stores the coordinates of a cell in a field
 Cell :: [2]int
 
+// The errors that can occur when converting a Polyomino to a Field
 FieldError :: enum {
 	NONE,
 	OUT_OF_RANGE_FREE,
@@ -35,6 +37,8 @@ FieldError :: enum {
 Field :: [dynamic][dynamic]FieldState
 FilteredField :: Field
 
+// Creates a field
+// By default, the origin is at 1, 0 and the dimensions are 3x2
 make_field :: proc(origin: Cell = {1, 0}, size: [2]int = {3, 2}) -> Field {
 	res : Field
 
@@ -51,17 +55,20 @@ make_field :: proc(origin: Cell = {1, 0}, size: [2]int = {3, 2}) -> Field {
 	return res
 }
 
+// Deallocate the memory given to a field
 destroy_field :: proc(field: Field) {
 	for row in field do delete(row) 
 	delete(field)
 }
 
+// Grow a field in the specified direction
 grow_field :: proc(field: ^Field, dir: Direction) {
 	switch dir {
 	case .UP:
 		append(field, make([dynamic]FieldState, len(field^[0])))
 	case .LEFT:
 		for &row, i in field {
+			// Append a .BORDER if on the left edge, otherwise append a .FREE
 			if i == 0 {
 				inject_at(&row, 0, FieldState(.BORDER))
 			} else {
@@ -73,22 +80,25 @@ grow_field :: proc(field: ^Field, dir: Direction) {
 	}
 }
 
+// Write the open cells to a dynamic array from a given field
 get_free :: proc(field: ^Field, free: ^[dynamic]Cell) {
-	clear(free)		
+	clear(free) // clears the free array
 
 	for row, y in field {
 		for cell, x in row {
+			// Don't bother checking cells that aren't empty
 			if cell == .OCCUPIED || cell == .BORDER || cell == .CHECKED do continue	
 
-			if y - 1 >= 0 && field[y - 1][x] == .OCCUPIED {
+			// Check if adjacent cells are .OCCUPIED 
+			if y - 1 >= 0 && field[y - 1][x] == .OCCUPIED { // Check the cell above
 				append(free, Cell{x, y})
 				continue
-			} else if y + 1 < len(field) && field[y + 1][x] == .OCCUPIED {
+			} else if y + 1 < len(field) && field[y + 1][x] == .OCCUPIED { // Check the cell below
 				append(free, Cell{x, y})
-			} else if x - 1 >= 0 && field[y][x - 1] == .OCCUPIED {
+			} else if x - 1 >= 0 && field[y][x - 1] == .OCCUPIED { // Check the cell to the left
 				append(free, Cell{x, y})
 				continue
-			} else if x + 1 < len(field[0]) && field[y][x + 1] == .OCCUPIED {
+			} else if x + 1 < len(field[0]) && field[y][x + 1] == .OCCUPIED { // Check the cell to the right
 				append(free, Cell{x, y})
 				continue
 			}
@@ -96,6 +106,7 @@ get_free :: proc(field: ^Field, free: ^[dynamic]Cell) {
 	}	
 }
 
+// Attempt to add a cell from the free array to a field
 add_cell_from_free :: proc(field: ^Field, free: []Cell, index: int) -> FieldError {
 	if index >= len(free) do return .OUT_OF_RANGE_FREE 
 
@@ -109,21 +120,29 @@ add_cell_from_free :: proc(field: ^Field, free: []Cell, index: int) -> FieldErro
 	return err 
 }
 
+// Attempt to add a cell to a field
 add_cell :: proc(field: ^Field, cell: Cell) -> FieldError {
+	// get the size of the field
 	size := [2]int{ len(field[0]), len(field) }
+	// if the cell is out of bounds, return
 	if cell.y >= size.y || cell.y < 0 do return .OUT_OF_RANGE_Y 
 	if cell.x >= size.x || cell.x < 0 do return .OUT_OF_RANGE_X
 
+	// if the targeted cell is not .FREE, return
 	target := field[cell.y][cell.x]
 	if target != .FREE do return .NOT_FREE
 
+	// set the cell to occupied
 	field[cell.y][cell.x] = .OCCUPIED
+
+	// grow the field if necessary
 	if cell.y == size.y - 1 do grow_field(field, .UP)
 	if cell.x == 0 do grow_field(field, .LEFT)
 	if cell.x == size.x - 1 do grow_field(field, .RIGHT)
 	return .NONE
 }
 
+// Draw a cell on a field, regardless of validity
 draw_cell :: proc(field: ^Field, cell: Cell, value: FieldState) {
 	cur_coords := cell
 	size := [2]int{ len(field[0]), len(field) }
@@ -149,6 +168,11 @@ draw_cell :: proc(field: ^Field, cell: Cell, value: FieldState) {
 	}
 }
 
+// Prints a field to the console
+// # = Occupied
+// . = Checked
+// . = Free
+// _ = Border
 print_field :: proc(field: Field) {
 	for y := len(field) - 1; y >= 0; y -= 1 {
 		for cell, x in field[y] {
@@ -168,20 +192,28 @@ print_field :: proc(field: Field) {
 }
 
 field_to_polyomino :: proc(field: Field) -> Polyomino {
-	res := make_polyomino()
-	carry := 0
-	cur_index := 1
+	res := make_polyomino() // the final polyomino
+	carry := 0 // the current u128 within the polyomino's binary
+	cur_index := 1 // the current digit within the polyomino's binary
+
+	// create a dummy field to simulate possible free spaces
 	dum := make_field(get_origin(field), { len(field[0]), len(field) })
 	defer destroy_field(dum)
 	free : [dynamic]Cell
 	defer delete(free)
 
 	outer: for {
+		// get the free spaces available
 		get_free(&dum, &free)
+		// if no spaces available, break
 		if len(free) == 0 do break outer
+
+		// loop through the free spaces
 		for cell, i in free {
+			// increment the counter by 1
 			cur_index += 1
 
+			// if the counter is greater than 128, move to the next u128
 			if cur_index > 128 {
 				append(&res.bin, 0)
 				cur_index = 1
