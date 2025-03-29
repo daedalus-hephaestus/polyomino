@@ -11,8 +11,7 @@ import rl "vendor:raylib"
 import "core:sync"
 import "core:thread"
 import "core:time"
-
-// A001168 - Number of fixed polyominoes with n cells
+import "core:flags"
 
 // The tile size for the raylib window
 tile :i32 = 10
@@ -28,53 +27,15 @@ valid : bool
 // The polyomino being intially loaded - will change to paste eventually
 init_bin :cstring = ""
 init_size : int
-cur_index := 0
-
-max_threads :: 100 
-
-polyomino_size :: 20 
-polyomino_index :: 2870671950
 
 stopwatch : time.Stopwatch
 
-IsValid :: enum {
-	UNCHECKED,
-	YES,
-	NO
-}
-
-QueueItem :: struct {
-	poly: Polyomino,
-	is_valid: IsValid
-}
-
-Queue :: struct {
-	list: [max_threads]QueueItem,
-	count: u128,
-	checked: u128,
-	wait_group: sync.Wait_Group,
-	counting_done: sync.Barrier
-}
-
-init_queue :: proc() -> Queue {
-	res : Queue
-	sync.barrier_init(&res.counting_done, max_threads + 1)
-	sync.wait_group_add(&res.wait_group, max_threads)
-	tmp := starting_polyomino(polyomino_size)
-	defer destroy_polyomino(&tmp)
-	for i in 0..<max_threads {
-		res.list[i].poly = copy_polyomino(tmp)
-		inc_polyomino(&tmp)
-	}
-	return res
-}
-
-destroy_queue :: proc(queue: ^Queue) {
-	for &i in queue.list do destroy_polyomino(&i.poly)
-}
-
-print_queue :: proc(queue: Queue) {
-	for i in queue.list do fmt.printfln("%b - %v", i.poly.bin, i.is_valid)
+Options :: struct {
+	threads: int,
+	index: u128,
+	size: int,
+	timer: bool,
+	print: u128 
 }
 
 main :: proc() {
@@ -98,92 +59,18 @@ main :: proc() {
 			mem.tracking_allocator_destroy(&track)
 		}
 	}
-	
-	//test : Polyomino
-	//defer destroy_polyomino(&test)
-	//append(&test.bin, max(u128))
-	//inc_polyomino(&test)
-	//inc_polyomino(&test)
 
-	// saves the cursor top position, and makes it invisible
-	fmt.printf("\033[s\033[?25l")
+	opt : Options
+	flags.parse_or_exit(&opt, os.args, .Unix) 
+	if opt.timer do time.stopwatch_start(&stopwatch)	
 
-	time.stopwatch_start(&stopwatch)
+	fmt.printf("\033[s")
 
-	threads: [max_threads]^thread.Thread
-	mutex : sync.Mutex
-
-	queue := init_queue()
-	defer destroy_queue(&queue)
-
-
-	for i in 0 ..< len(threads) {
-		thread_id := i
-		threads[i] = thread.create_and_start_with_poly_data3(
-			&queue,
-			&mutex,
-			thread_id,
-			process_poly
-		)
-	}
-
-	reader := thread.create_and_start_with_poly_data2(&queue, &mutex, read_queue)
-
-	thread.join_multiple(..threads[:])
-	thread.join(reader)
-
-	time.stopwatch_stop(&stopwatch)		
-	fmt.println(time.clock_from_stopwatch(stopwatch))
-
-	defer thread.destroy(reader)
-	for t in threads do thread.destroy(t)
-	fmt.printf("\033[?25h")
-}
-
-process_poly :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
-	for queue.count <= polyomino_index {
-		// run tests here
-		cur := queue.list[id]
-		if valid_free_polyomino(cur.poly, polyomino_size) {
-			queue.list[id].is_valid = .YES	
-		} else {
-			queue.list[id].is_valid = .NO
-		}
-		sync.wait_group_done(&queue.wait_group)
-		sync.barrier_wait(&queue.counting_done)
-		if queue.count >= polyomino_index do break
-		for i in 0..<max_threads {
-			inc_polyomino(&queue.list[id].poly)
-		}
-	}
-}
-
-read_queue :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
-	outer: for queue.count <= polyomino_index {
-		sync.wait_group_wait(&queue.wait_group)
-
-		for queue_item in queue.list {
-			queue.checked += 1
-			if queue_item.is_valid == .YES {
-				queue.count += 1
-				tmp_field, _ := polyomino_to_field(queue_item.poly)
-				defer destroy_field(tmp_field)
-
-				if queue.count == polyomino_index {
-					fmt.printfln("\033[uchecked: %v, found: %v", queue.checked, queue.count)
-					sync.barrier_wait(&queue.counting_done)
-					fmt.printf("\033[0J")
-					print_field(tmp_field)
-					break outer	
-				}
-
-				fmt.printfln("\033[0J")
-				print_field(tmp_field)
-			}
-			fmt.printfln("\033[uchecked: %v, found: %v", queue.checked, queue.count)
-		}
-		sync.wait_group_add(&queue.wait_group, max_threads)
-		sync.barrier_wait(&queue.counting_done)
+	calc_polyomino(opt.size, opt.threads, opt.index, opt.print)
+	// calc_polyomino(20, 16, 10000, 1000)
+	if opt.timer {
+		time.stopwatch_stop(&stopwatch)
+		fmt.println(time.clock_from_stopwatch(stopwatch))
 	}
 }
 

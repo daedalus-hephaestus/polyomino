@@ -187,49 +187,23 @@ inc_polyomino :: proc(poly: ^Polyomino) {
 			poly.bin[cur] |= max(u128) >> uint(128 - move_ones)
 		}
 	}
-
-	//i := 0
-	//for {
-	//	if i >= len(poly.bin) do append(&poly.bin, 0)
-	//
-	//	new_val := poly^.bin[i] + 1
-	//	if new_val < poly.bin[i] {
-	//		poly.bin[i] = new_val
-	//		i += 1
-	//	} else {
-	//		poly.bin[i] = new_val
-	//		break
-	//	}
-	//}
 }
 
-valid_polyomino :: proc(poly: Polyomino, size: int) -> PolyominoError {
-	cells := 0
-	for i in poly.bin do cells += int(bits.count_ones(i))
-	if cells != size do return .SIZE_MISMATCH 
-
-	_, valid := polyomino_to_field(poly)
-	return valid 
+valid_polyomino :: proc(poly: Polyomino, size: int) -> (Field, PolyominoError) {
+	return polyomino_to_field(poly)
 }
 
-valid_free_polyomino :: proc(poly: Polyomino, size: int) -> bool {
-	cells := 0
-	for i in poly.bin do cells += int(bits.count_ones(i))
-	if bit_at(0, poly.bin[0]) == 0 do return false
-	if cells != size do return false
-
-
-
+valid_free_polyomino :: proc(poly: Polyomino, size: int) -> (Field, bool) {
 	tmp_field, valid := polyomino_to_field(poly)
-	defer destroy_field(tmp_field)
-	if valid != .NONE do return false
+	// defer destroy_field(tmp_field)
+	if valid != .NONE do return tmp_field, false
 
 	vars := field_variations(tmp_field)
 	defer destroy_variations(&vars)
 	smallest, free := get_smallest(vars)
 	defer destroy_polyomino(&smallest)
 
-	return free
+	return tmp_field, free
 }
 
 copy_polyomino :: proc(poly: Polyomino) -> Polyomino {
