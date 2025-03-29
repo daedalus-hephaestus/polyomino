@@ -62,12 +62,11 @@ main :: proc() {
 
 	opt : Options
 	flags.parse_or_exit(&opt, os.args, .Unix) 
-	if opt.timer do time.stopwatch_start(&stopwatch)	
+	if opt.timer do time.stopwatch_start(&stopwatch)
 
 	fmt.printf("\033[s")
-
 	calc_polyomino(opt.size, opt.threads, opt.index, opt.print)
-	// calc_polyomino(20, 16, 10000, 1000)
+
 	if opt.timer {
 		time.stopwatch_stop(&stopwatch)
 		fmt.println(time.clock_from_stopwatch(stopwatch))

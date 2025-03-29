@@ -92,7 +92,7 @@ read_queue :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 
 				if queue.count == queue.index {
 					fmt.printfln("\033[uchecked: %v, found: %v", queue.checked, queue.count)
-					if queue.print > 0 && queue.count % queue.print == 0 {
+					if queue.print > 0 {
 						fmt.printfln("\033[0JNo. %v", queue.count)
 						print_field(queue_item.field)
 					}
