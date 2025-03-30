@@ -1,6 +1,7 @@
 package polyomino
 
 import "core:math/bits"
+import "core:math/rand"
 import "core:fmt"
 import "core:os"
 import str "core:strings"
@@ -289,4 +290,23 @@ starting_polyomino :: proc(size: int) -> Polyomino {
 	return res
 }
 
+random_polyomino :: proc(size: int) -> Polyomino {
+	for {
+		res : Polyomino
+		length := rand.int_max((size - 1) * 2) + size
+		array_size := length / 128
+		for i in 0..<array_size do append(&res.bin, 0)
 
+		for j in 0..<size - 2 {
+			for  {
+				index := rand.int_max(length)
+				carry := index / 128
+				carry_index := uint(index - (carry * 128))
+				if len(res.bin) <= carry do append(&res.bin, 0)
+				if bit_at(carry_index, res.bin[carry]) == 0 {
+					res.bin[carry] |= 1 >> carry_index
+				}
+			}
+		}
+	}
+}
