@@ -30,12 +30,19 @@ init_size : int
 
 stopwatch : time.Stopwatch
 
+Mode :: enum {
+	INDEX,
+	COUNT,
+	COUNTALL
+}
+
 Options :: struct {
 	threads: int,
 	index: u128,
 	size: int,
 	timer: bool,
-	print: u128 
+	print: u128,
+	mode: Mode
 }
 
 main :: proc() {
@@ -60,12 +67,23 @@ main :: proc() {
 		}
 	}
 
+	//tmp_calc()
+
 	opt : Options
 	flags.parse_or_exit(&opt, os.args, .Unix) 
 	if opt.timer do time.stopwatch_start(&stopwatch)
 
 	fmt.printf("\033[s")
-	calc_polyomino(opt.size, opt.threads, opt.index, opt.print)
+	if opt.mode == .INDEX {
+		calc_polyomino(opt.size, opt.threads, opt.index, opt.print)
+	} else if opt.mode == .COUNT {
+		count_length(opt.size, opt.threads, opt.index)
+	} else if opt.mode == .COUNTALL {
+		for i in opt.size..=(opt.size - 1) * 3 {
+			fmt.printf("\033[s")
+			count_length(opt.size, opt.threads, u128(i))
+		} 
+	}
 
 	if opt.timer {
 		time.stopwatch_stop(&stopwatch)

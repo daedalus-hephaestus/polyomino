@@ -28,7 +28,7 @@ Queue :: struct {
 	counting_done: sync.Barrier
 }
 
-init_queue :: proc(size: int, thread_count: int, index: u128, print: u128) -> Queue {
+init_queue :: proc(size: int, thread_count: int, index: u128, print: u128, length: int = -1) -> Queue {
 	res : Queue
 	res.size = size
 	res.thread_count = thread_count
@@ -38,7 +38,7 @@ init_queue :: proc(size: int, thread_count: int, index: u128, print: u128) -> Qu
 	sync.barrier_init(&res.counting_done, thread_count + 1)
 	sync.wait_group_add(&res.wait_group, thread_count)
 
-	tmp := starting_polyomino(size)
+	tmp := length > size ? starting_polyomino(size, int(index)) : starting_polyomino(size)
 	defer destroy_polyomino(&tmp)
 
 	for i in 0..<thread_count {
@@ -144,4 +144,41 @@ calc_polyomino :: proc(size: int, thread_count: int, index: u128, print: u128) {
 
 	for t in threads do thread.destroy(t)
 	delete(threads)
+}
+
+count_length :: proc(size: int, thread_count: int, length: u128) {
+	threads : [dynamic]^thread.Thread
+	mutex : sync.Mutex
+	queue := init_queue(size, thread_count, length, 0, int(length))
+	defer destroy_queue(&queue)
+
+	for i in 0..<thread_count {
+		append(&threads, thread.create_and_start_with_poly_data3(
+			&queue,
+			&mutex,
+			i,
+			process_length
+		))
+	}
+
+	thread.join_multiple(..threads[:])
+	for t in threads do thread.destroy(t)
+	delete(threads)
+}
+
+process_length :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
+	for {
+		length := get_polyomino_len(queue.list[id].poly)
+		if length > int(queue.index) do break
+
+		tmp_field, is_valid := valid_free_polyomino(queue.list[id].poly, queue.size)
+		defer destroy_field(tmp_field)
+
+		sync.lock(mutex)
+		queue.checked += 1
+		if is_valid do queue.count += 1
+		fmt.printfln("\033[uchecked: %v, found: %v of length %v", queue.checked, queue.count, queue.index)
+		sync.unlock(mutex)
+		for i in 0..<queue.thread_count do inc_polyomino(&queue.list[id].poly)
+	}
 }

@@ -39,12 +39,12 @@ get_polyomino_len :: proc(poly: Polyomino) -> int {
 	cells := 0
 	for seg, i in poly.bin {
 		if i == len(poly.bin) - 1 {
-			cells += int(bits.leading_zeros(poly.bin[i]))
+			cells += 128 - int(bits.leading_zeros(seg))
 		} else {
 			cells += 128
 		}
 	}
-	return 0
+	return cells 
 }
 
 polyomino_to_field :: proc(poly: Polyomino) -> (Field, PolyominoError) {
@@ -272,20 +272,38 @@ compare_polyomino :: proc(poly0: Polyomino, poly1: Polyomino) -> int {
 	return -1
 }
 
-starting_polyomino :: proc(size: int) -> Polyomino {
+starting_polyomino :: proc(size: int, length: int=-1) -> Polyomino {
 	res : Polyomino
 	append(&res.bin, 0)
 
 	carry := 0
 	write_i :uint = 0
-	for i in 0..<size {
-		if write_i > 127 {
-			write_i = 0
-			carry += 1
-			append(&res.bin, 1)
+
+	if length <= size {
+		for i in 0..<size {
+			if write_i > 127 {
+				write_i = 0
+				carry += 1
+				append(&res.bin, 1)
+			}
+			res.bin[carry] |= u128(1) << write_i
+			write_i += 1
+		}		
+	} else {
+		for i in 0..<size - 1 {
+			if write_i > 127 {
+				write_i = 0
+				carry += 1
+				append(&res.bin, 1)
+			}
+			res.bin[carry] |= u128(1) << write_i
+			write_i += 1
 		}
-		res.bin[carry] |= u128(1) << write_i
-		write_i += 1
+		last_carry := (length - 1) / 128
+		last_write := length - (last_carry * 128) - 1
+
+		for len(res.bin) - 1 < last_carry do append(&res.bin, 0)
+		res.bin[last_carry] |= u128(1) << uint(last_write)
 	}
 	return res
 }
