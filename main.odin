@@ -36,13 +36,19 @@ Mode :: enum {
 	COUNTALL
 }
 
+Type :: enum {
+	FIXED,
+	FREE
+}
+
 Options :: struct {
 	threads: int,
 	index: u128,
 	size: int,
 	timer: bool,
 	print: u128,
-	mode: Mode
+	mode: Mode,
+	type: Type
 }
 
 main :: proc() {
@@ -77,12 +83,23 @@ main :: proc() {
 	if opt.mode == .INDEX {
 		calc_polyomino(opt.size, opt.threads, opt.index, opt.print)
 	} else if opt.mode == .COUNT {
-		count_length(opt.size, opt.threads, opt.index)
+		if opt.type == .FREE {
+			calc_length_free(opt.size, opt.threads, opt.index)
+		} else if opt.type == .FIXED {
+			calc_length_fixed(opt.size, opt.threads, opt.index)
+		}
 	} else if opt.mode == .COUNTALL {
-		for i in opt.size..=(opt.size - 1) * 3 {
-			fmt.printf("\033[s")
-			count_length(opt.size, opt.threads, u128(i))
-		} 
+		if opt.type == .FREE {
+			for i in opt.size..=(opt.size - 1) * 3 {
+				fmt.printf("\033[s")
+				calc_length_free(opt.size, opt.threads, u128(i))
+			}
+		} else if opt.type == .FIXED {
+			for i in opt.size..=(opt.size - 1) * 3 {
+				fmt.printf("\033[s")
+				calc_length_fixed(opt.size, opt.threads, u128(i))
+			}
+		}
 	}
 
 	if opt.timer {
