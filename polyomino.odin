@@ -200,7 +200,7 @@ inc_polyomino :: proc(poly: ^Polyomino) {
 	}
 }
 
-valid_polyomino :: proc(poly: Polyomino, size: int) -> (Field, PolyominoError) {
+valid_fixed_polyomino :: proc(poly: Polyomino, size: int) -> (Field, PolyominoError) {
 	field, err := polyomino_to_field(poly)
 	return field, err
 }

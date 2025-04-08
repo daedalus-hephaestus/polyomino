@@ -42,13 +42,17 @@ Type :: enum {
 }
 
 Options :: struct {
-	threads: int,
-	index: u128,
-	size: int,
-	timer: bool,
-	print: u128,
-	mode: Mode,
-	type: Type
+	threads: int `args:"required" usage:"The number of threads to utilize"`,
+	index: u128 `usage:"INDEX mode: the index to go to
+	COUNT mode: The length of the polyomino binary string"`,
+	size: int `args:"required" usage:"The size of the polyomino"`,
+	timer: bool `usage:"Whether or not to time the run"`,
+	print: u128 `usage:"When to print in index mode (0=only the last, n=print every nth polyomino)"`,
+	mode: Mode `args:"required" usage:"INDEX: Get the polyomino at index
+	COUNT: count all polyominos of string length index
+	COUNTALL: count all polyominos of all possible string lengths"`,
+	type: Type `usage:"FIXED: run mode on fixed polyominos (default)
+	FREE: run mode on free polyominos"`
 }
 
 main :: proc() {
@@ -79,9 +83,12 @@ main :: proc() {
 	flags.parse_or_exit(&opt, os.args, .Unix) 
 	if opt.timer do time.stopwatch_start(&stopwatch)
 
-	fmt.printf("\033[s")
 	if opt.mode == .INDEX {
-		calc_polyomino(opt.size, opt.threads, opt.index, opt.print)
+		if opt.type == .FREE{
+			calc_polyomino_free(opt.size, opt.threads, opt.index, opt.print)
+		} else if opt.type == .FIXED {
+			calc_polyomino_fixed(opt.size, opt.threads, opt.index, opt.print)
+		}
 	} else if opt.mode == .COUNT {
 		if opt.type == .FREE {
 			calc_length_free(opt.size, opt.threads, opt.index)
@@ -91,12 +98,10 @@ main :: proc() {
 	} else if opt.mode == .COUNTALL {
 		if opt.type == .FREE {
 			for i in opt.size..=(opt.size - 1) * 3 {
-				fmt.printf("\033[s")
 				calc_length_free(opt.size, opt.threads, u128(i))
 			}
 		} else if opt.type == .FIXED {
 			for i in opt.size..=(opt.size - 1) * 3 {
-				fmt.printf("\033[s")
 				calc_length_fixed(opt.size, opt.threads, u128(i))
 			}
 		}
