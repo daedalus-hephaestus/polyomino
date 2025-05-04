@@ -33,7 +33,8 @@ stopwatch : time.Stopwatch
 Mode :: enum {
 	INDEX,
 	COUNT,
-	COUNTALL
+	COUNTALL,
+	RANDOM
 }
 
 Type :: enum {
@@ -50,7 +51,8 @@ Options :: struct {
 	print: u128 `usage:"When to print in index mode (0=only the last, n=print every nth polyomino)"`,
 	mode: Mode `args:"required" usage:"INDEX: Get the polyomino at index
 	COUNT: count all polyominos of string length index
-	COUNTALL: count all polyominos of all possible string lengths"`,
+	COUNTALL: count all polyominos of all possible string lengths
+	RANDOM: get a random polyomino"`,
 	type: Type `usage:"FIXED: run mode on fixed polyominos (default)
 	FREE: run mode on free polyominos"`
 }
@@ -77,10 +79,9 @@ main :: proc() {
 		}
 	}
 
-	//tmp_calc()
-
 	opt : Options
 	flags.parse_or_exit(&opt, os.args, .Unix) 
+
 	if opt.timer do time.stopwatch_start(&stopwatch)
 
 	if opt.mode == .INDEX {
@@ -105,11 +106,17 @@ main :: proc() {
 				calc_length_fixed(opt.size, opt.threads, u128(i))
 			}
 		}
+	} else if opt.mode == .RANDOM {
+		if opt.type == .FREE {
+			find_random_free(opt.size, opt.threads)
+		}	else if opt.type == .FIXED {
+
+		}
 	}
 
 	if opt.timer {
-		time.stopwatch_stop(&stopwatch)
-		fmt.println(time.clock_from_stopwatch(stopwatch))
+	 	time.stopwatch_stop(&stopwatch)
+	 	fmt.println(time.clock_from_stopwatch(stopwatch))
 	}
 }
 

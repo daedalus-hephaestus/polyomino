@@ -307,3 +307,50 @@ process_length_fixed :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
 		for i in 0..<queue.thread_count do inc_polyomino(&queue.list[id].poly)
 	}
 }
+
+find_random_free :: proc(size: int, thread_count: int) {
+	threads : [dynamic]^thread.Thread
+	mutex : sync.Mutex
+	done : bool
+
+	for i in 0..<thread_count {
+		append(&threads, thread.create_and_start_with_poly_data4(
+			&mutex,
+			i,
+			size,
+			&done,
+			process_random_free
+		))
+	}
+
+	thread.join_multiple(..threads[:])
+
+	for t in threads do thread.destroy(t)
+	delete(threads)
+}
+
+process_random_free :: proc(mutex: ^sync.Mutex, id: int, size: int, done: ^bool) {
+	for {
+		sync.lock(mutex)
+		if done^ {
+			sync.unlock(mutex)
+			break
+		}
+		sync.unlock(mutex)
+
+		tmp := random_polyomino_bin(size)
+		defer destroy_polyomino(&tmp)
+
+		field, val := valid_free_polyomino(tmp, size)	
+		defer destroy_field(field)
+
+		if val {
+			sync.lock(mutex)
+			if !done^ do print_field(field)
+			done^ = true
+			sync.unlock(mutex)
+
+			break
+		}
+	}
+}

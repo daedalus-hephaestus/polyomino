@@ -309,23 +309,49 @@ starting_polyomino :: proc(size: int, length: int=-1) -> Polyomino {
 	return res
 }
 
-random_polyomino :: proc(size: int) -> Polyomino {
-	for {
-		res : Polyomino
-		length := rand.int_max((size - 1) * 2) + size
-		array_size := length / 128
-		for i in 0..<array_size do append(&res.bin, 0)
+random_polyomino_bin :: proc(size: int) -> Polyomino {
+	res : Polyomino
+	str_length := size * 3 - 1//rand.int_max(size * 3 - 1 - size) + size
+	seg_count := (str_length - 1) / 128 + 1
+	last_len := str_length % 128
 
-		for j in 0..<size - 2 {
-			for  {
-				index := rand.int_max(length)
-				carry := index / 128
-				carry_index := uint(index - (carry * 128))
-				if len(res.bin) <= carry do append(&res.bin, 0)
-				if bit_at(carry_index, res.bin[carry]) == 0 {
-					res.bin[carry] |= 1 >> carry_index
-				}
-			}
+	for i in 0..<seg_count do append(&res.bin, 0)
+
+	count := size
+	res.bin[0] = 1
+	//res.bin[seg_count - 1] |= 1 << uint(last_len - 1)
+	count -= 1
+
+	for count > 0 {
+		i := rand.int_max(str_length) + 1
+		cur_seg := (i - 1) / 128 
+		cur_i := i % 128 - 1
+		if bit_at(uint(cur_i), res.bin[cur_seg]) == 1 {
+			continue
+		} else {
+			res.bin[cur_seg] |= u128(1) << uint(cur_i)
+			count -= 1
 		}
 	}
+	return res
+}
+
+random_polyomino_free :: proc(size: int) -> Polyomino {
+	res : Polyomino
+
+	for {
+		tmp := random_polyomino_bin(size)
+		field, val := valid_free_polyomino(tmp, size)	
+		if val {
+			res = copy_polyomino(tmp)
+			print_field(field)
+			destroy_field(field)
+			destroy_polyomino(&tmp)
+			break
+		}
+		destroy_field(field)
+		destroy_polyomino(&tmp)
+	}	
+
+	return res
 }
