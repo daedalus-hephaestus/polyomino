@@ -110,7 +110,7 @@ main :: proc() {
 		if opt.type == .FREE {
 			find_random_free(opt.size, opt.threads)
 		}	else if opt.type == .FIXED {
-
+			find_random_fixed(opt.size, opt.threads)
 		}
 	}
 
