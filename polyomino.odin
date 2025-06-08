@@ -207,7 +207,6 @@ valid_fixed_polyomino :: proc(poly: Polyomino, size: int) -> (Field, PolyominoEr
 
 valid_free_polyomino :: proc(poly: Polyomino, size: int) -> (Field, bool) {
 	tmp_field, valid := polyomino_to_field(poly)
-	// defer destroy_field(tmp_field)
 	if valid != .NONE do return tmp_field, false
 
 	vars := field_variations(tmp_field)
@@ -309,9 +308,12 @@ starting_polyomino :: proc(size: int, length: int=-1) -> Polyomino {
 	return res
 }
 
-random_polyomino_bin :: proc(size: int) -> Polyomino {
+random_polyomino_bin :: proc(size: int, type: Type) -> Polyomino {
 	res : Polyomino
-	str_length := size * 3 - 1//rand.int_max(size * 3 - 1 - size) + size
+
+	str_length := (size - 1) * 3 
+ 	if type == .FREE && size >= 9 do str_length -= 4
+
 	seg_count := (str_length - 1) / 128 + 1
 	last_len := str_length % 128
 
@@ -319,7 +321,6 @@ random_polyomino_bin :: proc(size: int) -> Polyomino {
 
 	count := size
 	res.bin[0] = 1
-	//res.bin[seg_count - 1] |= 1 << uint(last_len - 1)
 	count -= 1
 
 	for count > 0 {
@@ -336,11 +337,11 @@ random_polyomino_bin :: proc(size: int) -> Polyomino {
 	return res
 }
 
-random_polyomino_free :: proc(size: int) -> Polyomino {
+random_polyomino :: proc(size: int, type: Type) -> Polyomino {
 	res : Polyomino
 
 	for {
-		tmp := random_polyomino_bin(size)
+		tmp := random_polyomino_bin(size, type)
 		field, val := valid_free_polyomino(tmp, size)	
 		if val {
 			res = copy_polyomino(tmp)

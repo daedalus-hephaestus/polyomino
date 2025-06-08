@@ -34,7 +34,8 @@ Mode :: enum {
 	INDEX,
 	COUNT,
 	COUNTALL,
-	RANDOM
+	RANDOM,
+	BENCHMARK
 }
 
 Type :: enum {
@@ -42,8 +43,10 @@ Type :: enum {
 	FREE
 }
 
+Time :: [3]int
+
 Options :: struct {
-	threads: int `args:"required" usage:"The number of threads to utilize"`,
+	threads: int `usage:"The number of threads to utilize"`,
 	index: u128 `usage:"INDEX mode: the index to go to
 	COUNT mode: The length of the polyomino binary string"`,
 	size: int `args:"required" usage:"The size of the polyomino"`,
@@ -52,7 +55,8 @@ Options :: struct {
 	mode: Mode `args:"required" usage:"INDEX: Get the polyomino at index
 	COUNT: count all polyominos of string length index
 	COUNTALL: count all polyominos of all possible string lengths
-	RANDOM: get a random polyomino"`,
+	RANDOM: get a random polyomino
+	BENCHMARK: calculates the average time to generate a random polyomino"`,
 	type: Type `usage:"FIXED: run mode on fixed polyominos (default)
 	FREE: run mode on free polyominos"`
 }
@@ -80,9 +84,11 @@ main :: proc() {
 	}
 
 	opt : Options
-	flags.parse_or_exit(&opt, os.args, .Unix) 
+	flags.parse_or_exit(&opt, os.args, .Unix)
 
-	if opt.timer do time.stopwatch_start(&stopwatch)
+	if opt.threads == 0 do opt.threads = 16
+
+	if opt.timer || opt.mode == .BENCHMARK do time.stopwatch_start(&stopwatch)
 
 	if opt.mode == .INDEX {
 		if opt.type == .FREE{
@@ -92,19 +98,56 @@ main :: proc() {
 		}
 	} else if opt.mode == .COUNT {
 		if opt.type == .FREE {
-			calc_length_free(opt.size, opt.threads, opt.index)
+			fmt.printfln("Counting free %v-ominos with string length %v", opt.size, opt.index)
+			fmt.println("---------------------------------------------------------------")
+
+			count, checked := calc_length_free(opt.size, opt.threads, opt.index)
+
+			fmt.printfln("Found: %v - Checked: %v", count, checked)
 		} else if opt.type == .FIXED {
-			calc_length_fixed(opt.size, opt.threads, opt.index)
+			fmt.printfln("Counting fixed %v-ominos with string length %v", opt.size, opt.index)
+			fmt.println("---------------------------------------------------------------")
+
+			count, checked := calc_length_fixed(opt.size, opt.threads, opt.index)
+
+			fmt.println("Found: %v - Checked: %v", count, checked)
 		}
 	} else if opt.mode == .COUNTALL {
 		if opt.type == .FREE {
-			for i in opt.size..=(opt.size - 1) * 3 {
-				calc_length_free(opt.size, opt.threads, u128(i))
+			max := (opt.size - 1) * 3
+			if opt.size >= 9 do max -= 4
+
+			total : u128
+			
+			fmt.printfln("Counting free %v-ominos", opt.size)
+			fmt.println("---------------------------------------------------------------")
+
+			for i in opt.size..=max {
+				count, checked := calc_length_free(opt.size, opt.threads, u128(i))
+				if count <= 0 do break
+
+				total += count
+				fmt.printfln("string: %v | %v of %v", i, count, checked)
 			}
+
+			fmt.println("---------------------------------------------------------------")
+			fmt.printfln("TOTAL: %v", total)
 		} else if opt.type == .FIXED {
+			total : u128
+
+			fmt.printfln("Counting fixed %v-ominos", opt.size)
+			fmt.println("---------------------------------------------------------------")
+
 			for i in opt.size..=(opt.size - 1) * 3 {
-				calc_length_fixed(opt.size, opt.threads, u128(i))
+				count, checked := calc_length_fixed(opt.size, opt.threads, u128(i))
+				if count <= 0 do break
+
+				total += count
+				fmt.printfln("string: %v | %v of %v", i, count, checked)
 			}
+
+			fmt.println("---------------------------------------------------------------")
+			fmt.printfln("TOTAL: %v", total)
 		}
 	} else if opt.mode == .RANDOM {
 		if opt.type == .FREE {
@@ -112,12 +155,56 @@ main :: proc() {
 		}	else if opt.type == .FIXED {
 			find_random_fixed(opt.size, opt.threads)
 		}
+	} else if opt.mode == .BENCHMARK {
+
+		times : [dynamic]Time
+		defer delete(times)
+
+		for {
+			if opt.type == .FREE {
+				find_random_free(opt.size, opt.threads)
+			}	else if opt.type == .FIXED {
+				find_random_fixed(opt.size, opt.threads)
+			}
+
+			time.stopwatch_stop(&stopwatch)
+			
+			t := get_time(stopwatch)
+			fmt.printf("found 1 after: ")
+			print_time(t)
+			append(&times, t)
+
+			avg := average_time(times)
+			fmt.printf("new average: ")
+			print_time(avg)
+
+			time.stopwatch_reset(&stopwatch)
+			time.stopwatch_start(&stopwatch)
+		}
 	}
 
 	if opt.timer {
 	 	time.stopwatch_stop(&stopwatch)
-	 	fmt.println(time.clock_from_stopwatch(stopwatch))
+		t := get_time(stopwatch)
+		print_time(t)
 	}
+}
+
+get_time :: proc(watch: time.Stopwatch) -> Time {
+	h, m, s := time.clock_from_stopwatch(watch)
+	return {h, m, s}
+}
+print_time :: proc(t: Time) {
+	fmt.printfln("%vh %vm %vs", t[0], t[1], t[2])
+}
+average_time :: proc(times: [dynamic]Time) -> Time {
+	final : Time
+
+	for t in times {
+		final += t	
+	}
+
+	return final / len(times)
 }
 
 // Intializes the raylib window

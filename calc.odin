@@ -237,7 +237,10 @@ calc_polyomino_fixed :: proc(size: int, thread_count: int, index: u128, print: u
 	delete(threads)
 }
 
-calc_length_free :: proc(size: int, thread_count: int, length: u128) {
+calc_length_free :: proc(size: int, thread_count: int, length: u128) -> (u128, u128) {
+
+	if int(length) > (size - 1) * 3 do return 0, 0
+
 	threads : [dynamic]^thread.Thread
 	mutex : sync.Mutex
 	queue := init_queue(size, thread_count, length, 0, int(length))
@@ -254,10 +257,10 @@ calc_length_free :: proc(size: int, thread_count: int, length: u128) {
 
 	thread.join_multiple(..threads[:])
 
-	fmt.printfln("size: %v, length: %v | %v of %v", queue.size, queue.index, queue.count, queue.checked)
-
 	for t in threads do thread.destroy(t)
 	delete(threads)
+
+	return queue.count, queue.checked
 }
 
 process_length_free :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
@@ -276,7 +279,9 @@ process_length_free :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
 	}
 }
 
-calc_length_fixed :: proc(size: int, thread_count: int, length: u128) {
+calc_length_fixed :: proc(size: int, thread_count: int, length: u128) -> (u128, u128) {
+	if int(length) > (size - 1) * 3 do return 0, 0
+
 	threads : [dynamic]^thread.Thread
 	mutex : sync.Mutex
 	queue := init_queue(size, thread_count, length, 0, int(length))
@@ -292,11 +297,10 @@ calc_length_fixed :: proc(size: int, thread_count: int, length: u128) {
 	}
 
 	thread.join_multiple(..threads[:])
-
-	fmt.printfln("size: %v, length: %v | %v of %v", queue.size, queue.index, queue.count, queue.checked)
-
 	for t in threads do thread.destroy(t)
 	delete(threads)
+
+	return queue.count, queue.checked
 }
 
 process_length_fixed :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
@@ -337,7 +341,7 @@ find_random_free :: proc(size: int, thread_count: int) {
 
 process_random_free :: proc(mutex: ^sync.Mutex, id: int, queue: ^RandomQueue) {
 	for {
-		tmp := random_polyomino_bin(queue.size)
+		tmp := random_polyomino_bin(queue.size, .FREE)
 		defer destroy_polyomino(&tmp)
 
 		sync.lock(mutex)
@@ -385,7 +389,7 @@ find_random_fixed :: proc(size: int, thread_count: int) {
 
 process_random_fixed :: proc(mutex: ^sync.Mutex, id: int, queue: ^RandomQueue) {
 	for {
-		tmp := random_polyomino_bin(queue.size)
+		tmp := random_polyomino_bin(queue.size, .FIXED)
 		defer destroy_polyomino(&tmp)
 
 		sync.lock(mutex)
