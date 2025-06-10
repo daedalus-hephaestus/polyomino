@@ -110,7 +110,7 @@ main :: proc() {
 
 			count, checked := calc_length_fixed(opt.size, opt.threads, opt.index)
 
-			fmt.println("Found: %v - Checked: %v", count, checked)
+			fmt.printfln("Found: %v - Checked: %v", count, checked)
 		}
 	} else if opt.mode == .COUNTALL {
 		if opt.type == .FREE {

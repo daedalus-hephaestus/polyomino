@@ -313,7 +313,12 @@ process_length_fixed :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
 
 		sync.lock(mutex)
 		queue.checked += 1
-		if is_valid == .NONE do queue.count += 1
+		if is_valid == .NONE {
+			queue.count += 1
+			// str := polyomino_to_string(queue.list[id].poly)
+			// defer delete(str)
+			// fmt.println(str)
+		}
 		sync.unlock(mutex)
 		for i in 0..<queue.thread_count do inc_polyomino(&queue.list[id].poly)
 	}
