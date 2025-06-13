@@ -122,7 +122,9 @@ main :: proc() {
 			fmt.printfln("Counting free %v-ominos", opt.size)
 			fmt.println("---------------------------------------------------------------")
 
-			for i in opt.size..=max {
+			progress := int(opt.index) > opt.size ? int(opt.index) : opt.size
+
+			for i in progress..=max {
 				count, checked := calc_length_free(opt.size, opt.threads, u128(i))
 				if count <= 0 do break
 
@@ -138,7 +140,9 @@ main :: proc() {
 			fmt.printfln("Counting fixed %v-ominos", opt.size)
 			fmt.println("---------------------------------------------------------------")
 
-			for i in opt.size..=(opt.size - 1) * 3 {
+			progress := int(opt.index) > opt.size ? int(opt.index) : opt.size
+
+			for i in progress..=(opt.size - 1) * 3 {
 				count, checked := calc_length_fixed(opt.size, opt.threads, u128(i))
 				if count <= 0 do break
 
