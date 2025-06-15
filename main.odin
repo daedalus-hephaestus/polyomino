@@ -35,7 +35,8 @@ Mode :: enum {
 	COUNT,
 	COUNTALL,
 	RANDOM,
-	BENCHMARK
+	BENCHMARK,
+	SAVE
 }
 
 Type :: enum {
@@ -92,25 +93,28 @@ main :: proc() {
 
 	if opt.mode == .INDEX {
 		if opt.type == .FREE{
-			calc_polyomino_free(opt.size, opt.threads, opt.index, opt.print)
+			poly :=	index_polyomino_free(opt.size, opt.threads, opt.index, opt.print)
+			destroy_polyomino(&poly)
 		} else if opt.type == .FIXED {
-			calc_polyomino_fixed(opt.size, opt.threads, opt.index, opt.print)
+			poly := index_polyomino_fixed(opt.size, opt.threads, opt.index, opt.print)
+			fmt.println(poly)
+			destroy_polyomino(&poly)
 		}
 	} else if opt.mode == .COUNT {
 		if opt.type == .FREE {
 			fmt.printfln("Counting free %v-ominos with string length %v", opt.size, opt.index)
 			fmt.println("---------------------------------------------------------------")
 
-			count, checked := calc_length_free(opt.size, opt.threads, opt.index)
+			count, checked := count_length_free(opt.size, opt.threads, opt.index, opt.print)
 
-			fmt.printfln("Found: %v - Checked: %v", count, checked)
+			fmt.printfln("Found: %v - Checked: %v\n", count, checked)
 		} else if opt.type == .FIXED {
 			fmt.printfln("Counting fixed %v-ominos with string length %v", opt.size, opt.index)
 			fmt.println("---------------------------------------------------------------")
 
-			count, checked := calc_length_fixed(opt.size, opt.threads, opt.index)
+			count, checked := count_length_fixed(opt.size, opt.threads, opt.index, opt.print)
 
-			fmt.printfln("Found: %v - Checked: %v", count, checked)
+			fmt.printfln("Found: %v - Checked: %v\n", count, checked)
 		}
 	} else if opt.mode == .COUNTALL {
 		if opt.type == .FREE {
@@ -125,11 +129,11 @@ main :: proc() {
 			progress := int(opt.index) > opt.size ? int(opt.index) : opt.size
 
 			for i in progress..=max {
-				count, checked := calc_length_free(opt.size, opt.threads, u128(i))
+				count, checked := count_length_free(opt.size, opt.threads, u128(i), opt.print)
 				if count <= 0 do break
 
 				total += count
-				fmt.printfln("string: %v | %v of %v", i, count, checked)
+				fmt.printfln("string: %v | %v of %v\n", i, count, checked)
 			}
 
 			fmt.println("---------------------------------------------------------------")
@@ -143,11 +147,11 @@ main :: proc() {
 			progress := int(opt.index) > opt.size ? int(opt.index) : opt.size
 
 			for i in progress..=(opt.size - 1) * 3 {
-				count, checked := calc_length_fixed(opt.size, opt.threads, u128(i))
+				count, checked := count_length_fixed(opt.size, opt.threads, u128(i), opt.print)
 				if count <= 0 do break
 
 				total += count
-				fmt.printfln("string: %v | %v of %v", i, count, checked)
+				fmt.printfln("string: %v | %v of %v\n", i, count, checked)
 			}
 
 			fmt.println("---------------------------------------------------------------")
@@ -155,9 +159,13 @@ main :: proc() {
 		}
 	} else if opt.mode == .RANDOM {
 		if opt.type == .FREE {
-			find_random_free(opt.size, opt.threads)
+			poly := find_random_free(opt.size, opt.threads)
+			fmt.println(poly)
+			destroy_polyomino(&poly)
 		}	else if opt.type == .FIXED {
-			find_random_fixed(opt.size, opt.threads)
+			poly := find_random_fixed(opt.size, opt.threads)
+			fmt.println(poly)
+			destroy_polyomino(&poly)
 		}
 	} else if opt.mode == .BENCHMARK {
 
@@ -185,6 +193,8 @@ main :: proc() {
 			time.stopwatch_reset(&stopwatch)
 			time.stopwatch_start(&stopwatch)
 		}
+	} else if opt.mode == .SAVE {
+			
 	}
 
 	if opt.timer {

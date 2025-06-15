@@ -24,6 +24,7 @@ Queue :: struct {
 	checked: u128,
 	print: u128,
 	thread_count: int,
+	found: Polyomino,
 	wait_group: sync.Wait_Group,
 	counting_done: sync.Barrier
 }
@@ -32,7 +33,8 @@ RandomQueue :: struct {
 	checked: u128,
 	size: int,
 	thread_count: int,
-	done: bool
+	done: bool,
+	found: Polyomino
 }
 
 init_queue :: proc(size: int, thread_count: int, index: u128, print: u128, length: int = -1) -> Queue {
@@ -60,7 +62,12 @@ destroy_queue :: proc(queue: ^Queue) {
 		destroy_polyomino(&i.poly)
 		destroy_field(i.field)
 	}
+	destroy_polyomino(&queue.found)
 	delete(queue.list)
+}
+
+destroy_random_queue :: proc(queue: ^RandomQueue) {
+	destroy_polyomino(&queue.found)	
 }
 
 print_queue :: proc(queue: Queue) {
@@ -108,6 +115,9 @@ read_queue_free :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 				if queue.count == queue.index {
 					fmt.printfln("\nNo. %v", queue.count)
 					print_field(queue_item.field)
+
+					queue.found = copy_polyomino(queue_item.poly)
+
 					fmt.printfln("checked: %v, found: %v", queue.checked, queue.count)
 					sync.barrier_wait(&queue.counting_done)
 					break outer	
@@ -127,7 +137,7 @@ read_queue_free :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 	}
 }
 
-calc_polyomino_free :: proc(size: int, thread_count: int, index: u128, print: u128) {
+index_polyomino_free :: proc(size: int, thread_count: int, index: u128, print: u128) -> Polyomino {
 	threads : [dynamic]^thread.Thread
 	mutex : sync.Mutex
 	queue := init_queue(size, thread_count, index, print)
@@ -150,6 +160,8 @@ calc_polyomino_free :: proc(size: int, thread_count: int, index: u128, print: u1
 
 	for t in threads do thread.destroy(t)
 	delete(threads)
+
+	return copy_polyomino(queue.found)
 }
 
 process_poly_fixed :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
@@ -193,6 +205,9 @@ read_queue_fixed :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 				if queue.count == queue.index {
 					fmt.printfln("\nNo. %v", queue.count)
 					print_field(queue_item.field)
+
+					queue.found = copy_polyomino(queue_item.poly)
+
 					fmt.printfln("checked: %v, found: %v", queue.checked, queue.count)
 					sync.barrier_wait(&queue.counting_done)
 					break outer	
@@ -212,7 +227,7 @@ read_queue_fixed :: proc(queue: ^Queue, mutex: ^sync.Mutex) {
 	}
 }
 
-calc_polyomino_fixed :: proc(size: int, thread_count: int, index: u128, print: u128) {
+index_polyomino_fixed :: proc(size: int, thread_count: int, index: u128, print: u128) -> Polyomino {
 	threads : [dynamic]^thread.Thread
 	mutex : sync.Mutex
 	queue := init_queue(size, thread_count, index, print)
@@ -235,15 +250,17 @@ calc_polyomino_fixed :: proc(size: int, thread_count: int, index: u128, print: u
 
 	for t in threads do thread.destroy(t)
 	delete(threads)
+
+	return copy_polyomino(queue.found)
 }
 
-calc_length_free :: proc(size: int, thread_count: int, length: u128) -> (u128, u128) {
+count_length_free :: proc(size: int, thread_count: int, length: u128, print: u128) -> (u128, u128) {
 
 	if int(length) > (size - 1) * 3 do return 0, 0
 
 	threads : [dynamic]^thread.Thread
 	mutex : sync.Mutex
-	queue := init_queue(size, thread_count, length, 0, int(length))
+	queue := init_queue(size, thread_count, length, print, int(length))
 	defer destroy_queue(&queue)
 
 	for i in 0..<thread_count {
@@ -273,18 +290,27 @@ process_length_free :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
 
 		sync.lock(mutex)
 		queue.checked += 1
-		if is_valid do queue.count += 1
+		if is_valid {
+			queue.count += 1
+
+			if queue.print > 0 && queue.count % queue.print == 0 {
+				str := polyomino_to_string(queue.list[id].poly)
+				defer delete(str)
+				fmt.println(str)
+			} 
+		}
+
 		sync.unlock(mutex)
 		for i in 0..<queue.thread_count do inc_polyomino(&queue.list[id].poly)
 	}
 }
 
-calc_length_fixed :: proc(size: int, thread_count: int, length: u128) -> (u128, u128) {
+count_length_fixed :: proc(size: int, thread_count: int, length: u128, print: u128) -> (u128, u128) {
 	if int(length) > (size - 1) * 3 do return 0, 0
 
 	threads : [dynamic]^thread.Thread
 	mutex : sync.Mutex
-	queue := init_queue(size, thread_count, length, 0, int(length))
+	queue := init_queue(size, thread_count, length, print, int(length))
 	defer destroy_queue(&queue)
 
 	for i in 0..<thread_count {
@@ -315,19 +341,22 @@ process_length_fixed :: proc(queue: ^Queue, mutex: ^sync.Mutex, id: int) {
 		queue.checked += 1
 		if is_valid == .NONE {
 			queue.count += 1
-			// str := polyomino_to_string(queue.list[id].poly)
-			// defer delete(str)
-			// fmt.println(str)
+			if queue.print > 0 && queue.count % queue.print == 0 {
+				str := polyomino_to_string(queue.list[id].poly)
+				defer delete(str)
+				fmt.println(str)
+			} 
 		}
 		sync.unlock(mutex)
 		for i in 0..<queue.thread_count do inc_polyomino(&queue.list[id].poly)
 	}
 }
 
-find_random_free :: proc(size: int, thread_count: int) {
+find_random_free :: proc(size: int, thread_count: int) -> Polyomino {
 	threads : [dynamic]^thread.Thread
 	mutex : sync.Mutex
 	queue := RandomQueue { size = size, done = false, thread_count = thread_count }
+	defer destroy_random_queue(&queue)
 
 	for i in 0..<thread_count {
 		append(&threads, thread.create_and_start_with_poly_data3(
@@ -342,6 +371,8 @@ find_random_free :: proc(size: int, thread_count: int) {
 
 	for t in threads do thread.destroy(t)
 	delete(threads)
+
+	return copy_polyomino(queue.found)
 }
 
 process_random_free :: proc(mutex: ^sync.Mutex, id: int, queue: ^RandomQueue) {
@@ -366,16 +397,18 @@ process_random_free :: proc(mutex: ^sync.Mutex, id: int, queue: ^RandomQueue) {
 				print_field(field)
 				fmt.printfln("Checked: %v", queue.checked)
 			}
+			queue.found = copy_polyomino(tmp)
 			queue.done = true
 			sync.unlock(mutex)
 			break
 		}
 	}
 }
-find_random_fixed :: proc(size: int, thread_count: int) {
+find_random_fixed :: proc(size: int, thread_count: int) -> Polyomino {
 	threads : [dynamic]^thread.Thread
 	mutex : sync.Mutex
 	queue := RandomQueue { size = size, done = false, thread_count = thread_count }
+	defer destroy_random_queue(&queue)
 
 	for i in 0..<thread_count {
 		append(&threads, thread.create_and_start_with_poly_data3(
@@ -390,6 +423,8 @@ find_random_fixed :: proc(size: int, thread_count: int) {
 
 	for t in threads do thread.destroy(t)
 	delete(threads)
+
+	return copy_polyomino(queue.found)
 }
 
 process_random_fixed :: proc(mutex: ^sync.Mutex, id: int, queue: ^RandomQueue) {
@@ -414,6 +449,7 @@ process_random_fixed :: proc(mutex: ^sync.Mutex, id: int, queue: ^RandomQueue) {
 				print_field(field)
 				fmt.printfln("Checked: %v", queue.checked)
 			}
+			queue.found = copy_polyomino(tmp)
 			queue.done = true
 			sync.unlock(mutex)
 			break
